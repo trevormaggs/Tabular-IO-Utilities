@@ -4,7 +4,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
 import io.reader.ReadWorkbook;
-import io.style.ColourStyle;
+import io.style.AlternatingRowFactory;
 import io.writer.WriteWorkbook;
 import io.ExcelWritable;
 
@@ -77,11 +77,10 @@ public class TestWorkbook
             }
 
             book.setAutoFilter(0, 0, content.length - 1, header.length - 1);
-            book.alternateRowStyles(0, 0, content.length - 1, header.length - 1, ColourStyle.ORANGE);
+            //book.alternateRowStyles(0, 0, content.length - 1, header.length - 1, ColourStyle.ORANGE);
 
-            // AlternatingRowFactory factory = book.getInstanceAlternatingRow();
-            // factory.setHeaderRowRGB(192, 80, 77).setEvenRowRGB(204, 255, 204).setOddRowRGB(128, 100, 162).setBorderRGB(128, 128, 128).apply(0, 0, content.length - 1, header.length - 1);
-            // factory.apply(0, 0, content.length - 1, header.length - 1);
+            AlternatingRowFactory factory = book.getInstanceAlternatingRow();
+            factory.setHeaderRowRGB(192, 80, 77).setEvenRowRGB(204, 255, 204).setOddRowRGB(128, 100, 162).setBorderRGB(128, 128, 128).apply(0, 0, content.length - 1, header.length - 1);
 
             book.close();
         }
