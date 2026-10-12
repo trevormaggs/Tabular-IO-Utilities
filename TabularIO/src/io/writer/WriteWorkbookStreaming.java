@@ -170,25 +170,17 @@ public class WriteWorkbookStreaming extends AbstractWorkbook
         {
             try
             {
-                sxssfWorkbook.dispose();
+                sxssfWorkbook.close();
+            }
+
+            catch (IOException exc)
+            {
+                // Ignore close failure after write attempt
             }
 
             finally
             {
-                try
-                {
-                    sxssfWorkbook.close();
-                }
-
-                catch (IOException exc)
-                {
-                    // Ignore close failure after write attempt
-                }
-
-                finally
-                {
-                    sxssfWorkbook = null;
-                }
+                sxssfWorkbook = null;
             }
         }
     }

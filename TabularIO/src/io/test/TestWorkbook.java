@@ -94,6 +94,7 @@ public class TestWorkbook
 
     public static void main(String[] args)
     {
-        testReadWorkbook();
+        //testReadWorkbook();
+        testAlternatingRowFactory();
     }
 }

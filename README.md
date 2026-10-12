@@ -10,19 +10,19 @@ The library supports three file formats:
 - **Excel Workbook (`.xlsx`)** — Office Open XML spreadsheet format.
 - **Excel 97–2003 Workbook (`.xls`)** — legacy Microsoft Excel binary workbook format.
 
-Designed for integration into different Java applications, the library provides a common interface for reading and writing structured data, alongside spreadsheet-specific features such as multiple worksheets, automatic filters, and alternating row styles.
+Designed for integration into Java applications, the library provides common interfaces for reading and writing structured data, alongside spreadsheet-specific features such as multiple worksheets, automatic filters, and alternating row styles.
 
-Future development is intended to include support for the OpenDocument Spreadsheet (`.ods`) format used by LibreOffice Calc, extending the library's compatibility beyond CSV and Microsoft Excel workbooks.
+Future development is intended to include support for the OpenDocument Spreadsheet (`.ods`) format used by LibreOffice Calc, extending compatibility beyond CSV and Microsoft Excel workbooks.
 
 ## Documentation
 
-The complete API documentation is available in the published Javadoc:
+Complete API documentation is available in the published Javadoc:
 
-**[View Javadoc Documentation](https://trevormaggs.github.io/Tabular_IO_Utilities/)**
+[**View Javadoc Documentation**](https://trevormaggs.github.io/Tabular_IO_Utilities/)
 
 ## Features
 
-### CSV and tabular data processing
+### CSV and Tabular Data Processing
 
 The `Readable` and `Writable` interfaces define common contracts for reading and writing tabular data.
 
@@ -35,7 +35,7 @@ Features include:
 - Writing column headers and row content.
 - Locating columns by cell content or regular expressions.
 
-### Spreadsheet reading
+### Spreadsheet Reading
 
 The `ExcelReadable` interface extends `Readable` with workbook-specific operations:
 
@@ -43,7 +43,7 @@ The `ExcelReadable` interface extends `Readable` with workbook-specific operatio
 - Obtaining the total number of worksheets.
 - Reading worksheets by name or zero-based index.
 
-### Spreadsheet writing and formatting
+### Spreadsheet Writing and Formatting
 
 The `ExcelWritable` interface extends `Writable` with additional functionality:
 
@@ -53,7 +53,7 @@ The `ExcelWritable` interface extends `Writable` with additional functionality:
 - Applying alternating row styles.
 - Accessing the alternating row style factory.
 
-### Exception handling
+### Exception Handling
 
 The `TabularDataException` class provides a dedicated exception type for tabular data operations.
 
@@ -73,12 +73,12 @@ The library uses interfaces to establish consistent contracts for reading and wr
 
 Spreadsheet-specific styling support is provided by the `io.style` package, which includes `AlternatingRowFactory` and `ColourStyle`.
 
-This separation allows applications to work with tabular data through common interfaces while retaining access to features specific to spreadsheet formats.
+This separation allows applications to work with tabular data through common interfaces while retaining access to spreadsheet-specific features.
 
 ## Technologies
 
 - **Java** — core programming language.
-- **Apache POI** — library used to read and write Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
+- **Apache POI 5.5.1** — reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 - **Eclipse IDE** — development environment.
 - **Java `AutoCloseable`** — resource lifecycle management.
 - **Java regular expressions** — column-content searching.
@@ -86,33 +86,38 @@ This separation allows applications to work with tabular data through common int
 ## Java Compatibility
 
 - **Minimum Java version:** Java 8 (JDK 8).
-- The codebase is written without lambda expressions, favouring traditional Java syntax for compatibility and readability.
+- The codebase avoids lambda expressions, favouring traditional Java syntax for compatibility and readability.
 
 ## Dependencies
 
-This project uses the [Apache POI](https://poi.apache.org/) library to provide support for Microsoft Excel workbook formats.
+The library uses [Apache POI](https://poi.apache.org/) version **5.5.1** to read and write Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 
-Apache POI supports both the legacy `.xls` format and the modern `.xlsx` format. CSV processing uses a text-based tabular data approach.
+Apache POI requires additional libraries at runtime. When importing the project into Eclipse, ensure that Apache POI and its required dependencies are available on the Java Build Path.
 
-Ensure that the required Apache POI libraries and their dependencies are available on the Java Build Path when importing the project into Eclipse.
+The libraries used for development are maintained locally in the Eclipse project and are not included in the GitHub repository. Users setting up the project must obtain the appropriate libraries separately.
 
-### Usage
+CSV processing uses a text-based approach and does not require Apache POI for basic reading and writing operations.
+
+
+## Usage
 
 The library is intended to be integrated into Java applications through its reading and writing interfaces and their concrete implementations.
 
-Usage examples, dependency requirements, and supported format details can be added alongside the corresponding implementations.
+Refer to the published Javadoc for API details and available operations. Usage examples and additional integration guidance may be added as the project develops.
 
-## Project status
+## Project Status
 
 The library provides a foundation for reusable CSV and spreadsheet data processing in Java applications.
 
-Further documentation can describe the supported file formats, implementation details, dependencies, and usage examples as the project develops.
+The Apache POI dependency upgrade to version 5.5.1 has been completed, and testing is underway to verify compatibility and workbook processing behaviour.
+
+Future development may include OpenDocument Spreadsheet (`.ods`) support and further documentation of implementation details and usage examples.
 
 ## Credits
 
 Developed and maintained by **Trevor Maggs**.
 
-Bug reports, suggestions and feedback are welcome.
+Bug reports, suggestions, and feedback are welcome.
 
 **Email:** [trevmaggs@tpg.com.au](mailto:trevmaggs@tpg.com.au)
 
@@ -120,4 +125,4 @@ Bug reports, suggestions and feedback are welcome.
 
 This project is nearing completion, with further testing currently underway.
 
-An open-source `licence` will be added shortly. Until a licence is published, the terms under which this library may be used, modified, or redistributed have not yet been formally established.
+An open-source licence will be added shortly. Until a licence is published, the terms under which this library may be used, modified, or redistributed have not yet been formally established.

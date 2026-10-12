@@ -257,14 +257,14 @@ class ExcelHandler extends DefaultHandler
                 nextDataType = XssfDataType.FORMULA;
             }
 
-            else if (stylesTable != null && cellStyle != null)
-            {
-                readCellFormat(cellStyle);
-            }
-
             else
             {
                 nextDataType = XssfDataType.NUMBER;
+
+                if (stylesTable != null && cellStyle != null)
+                {
+                    readCellFormat(cellStyle);
+                }
             }
         }
     }
@@ -506,7 +506,8 @@ class ExcelHandler extends DefaultHandler
 
                 catch (NumberFormatException | IndexOutOfBoundsException exc)
                 {
-                    // Revert to the raw value as a fallback when shared string tables are not matched
+                    // Revert to the raw value as a fallback when shared string tables are not
+                    // matched
                     value = rawValue;
                 }
             break;
