@@ -6,13 +6,11 @@
 
 The library supports three file formats:
 
-- **CSV (`.csv`)** — comma-separated values.
-- **Excel Workbook (`.xlsx`)** — Office Open XML spreadsheet format.
-- **Excel 97–2003 Workbook (`.xls`)** — legacy Microsoft Excel binary workbook format.
+- **CSV (`.csv`)** - comma-separated values.
+- **Excel Workbook (`.xlsx`)** - Office Open XML spreadsheet format.
+- **Excel 97–2003 Workbook (`.xls`)** - legacy Microsoft Excel binary workbook format.
 
-Designed for integration into Java applications, the library provides common interfaces for reading and writing structured data, alongside spreadsheet-specific features such as multiple worksheets, automatic filters, and alternating row styles.
-
-Future development is intended to include support for the OpenDocument Spreadsheet (`.ods`) format used by LibreOffice Calc, extending compatibility beyond CSV and Microsoft Excel workbooks.
+Designed for integration into Java applications, this library provides common interfaces for reading and writing structured data, alongside spreadsheet-specific features such as multiple worksheets, automatic filters, and alternating row styles.
 
 ## Documentation
 
@@ -77,11 +75,10 @@ This separation allows applications to work with tabular data through common int
 
 ## Technologies
 
-- **Java** — core programming language.
-- **Apache POI 5.5.1** — reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
-- **Eclipse IDE** — development environment.
-- **Java `AutoCloseable`** — resource lifecycle management.
-- **Java regular expressions** — column-content searching.
+- **Java** - core programming language.
+- **Apache POI 5.5.1** - reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
+- **Eclipse IDE** - development environment.
+- **Java regular expressions** - column-content searching.
 
 ## Java Compatibility
 
@@ -109,9 +106,7 @@ Refer to the published Javadoc for API details and available operations. Usage e
 
 The library provides a foundation for reusable CSV and spreadsheet data processing in Java applications.
 
-The Apache POI dependency upgrade to version 5.5.1 has been completed, and testing is underway to verify compatibility and workbook processing behaviour.
-
-Future development may include OpenDocument Spreadsheet (`.ods`) support and further documentation of implementation details and usage examples.
+Future development may include support for OpenDocument Spreadsheet (`.ods`) format used by LibreOffice Calc, extending compatibility beyond CSV and Microsoft Excel workbooks and further documentation of implementation details and usage examples.
 
 ## Credits
 
