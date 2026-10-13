@@ -1,5 +1,6 @@
-package io;
+package io.test;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,6 +17,7 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 
 public final class SpreadsheetFileDetector
 {
+    // See: https://docs.oasis-open.org/office/OpenDocument/v1.3/OpenDocument-v1.3-part3-schema.html
     private static final String ODS_MIME_TYPE = "application/vnd.oasis.opendocument.spreadsheet";
 
     private static final byte[] OLE_SIGNATURE = {
@@ -61,9 +63,9 @@ public final class SpreadsheetFileDetector
         }
 
         /**
-         * Returns whether Apache POI successfully parsed the workbook. For ODS, this is always
-         * false because standard POI workbook parsing does not support the OpenDocument Spreadsheet
-         * format.
+         * Returns whether Apache POI successfully opened the workbook and the workbook contains at
+         * least one sheet. Returns {@code false} for ODS files because validation is not supported
+         * for that format.
          */
         public boolean isPoiValidated()
         {
@@ -71,92 +73,110 @@ public final class SpreadsheetFileDetector
         }
     }
 
+    /**
+     * Prevents direct instantiation.
+     *
+     * @throws UnsupportedOperationException
+     *         to indicate that direct instantiation is not supported
+     */
     private SpreadsheetFileDetector()
     {
-        // Utility class.
+        throw new UnsupportedOperationException("Instantiation not allowed");
     }
 
     /**
-     * Detects XLS, XLSX and ODS formats using file contents.
+     * Detects XLS, XLSX, and ODS spreadsheet formats by examining file contents.
+     * 
+     * <p>
+     * The detection process follows these steps:
+     * <ol>
+     * <li>Identifies legacy XLS files by checking for the OLE container signature and determining
+     * the BIFF version of the contained workbook stream.</li>
+     * <li>Identifies ZIP-based spreadsheet formats by inspecting their internal structures to
+     * distinguish ODS from XLSX packages.</li>
+     * <li>Returns an unknown format if no supported spreadsheet format is identified.</li>
+     * </ol>
      *
-     * @param path
-     *        path to the spreadsheet
-     * @return the detection result
+     * @param fpath
+     *        path to the spreadsheet file
+     * @return the detection result, including the detected format, BIFF version, and workbook
+     *         validation status
      * 
      * @throws IOException
-     *         if an I/O error occurs during initial detection
+     *         if an I/O error occurs while inspecting the file or validating the workbook
      */
-    public static DetectionResult detect(Path path) throws IOException
+    public static DetectionResult detect(Path fpath) throws IOException
     {
-
-        if (path == null || !Files.isRegularFile(path) || !Files.isReadable(path))
+        if (fpath != null && Files.isRegularFile(fpath) && Files.isReadable(fpath))
         {
-            return result(SpreadsheetFormat.UNKNOWN, BiffVersion.UNKNOWN, false);
-        }
-
-        // 1. Legacy Excel: OLE container containing a BIFF stream.
-        if (hasSignature(path, OLE_SIGNATURE))
-        {
-            BiffVersion version = detectBiffVersion(path);
-
-            if (version != BiffVersion.UNKNOWN)
+            if (containsMagicNumber(fpath, OLE_SIGNATURE))
             {
-                return result(SpreadsheetFormat.XLS, version, isPoiValidWorkbook(path));
+                BiffVersion version = detectBiffVersion(fpath);
+
+                if (version != BiffVersion.UNKNOWN)
+                {
+                    return new DetectionResult(SpreadsheetFormat.XLS, version, isPoiValidWorkbook(fpath));
+                }
+            }
+
+            else if (containsMagicNumber(fpath, ZIP_SIGNATURE))
+            {
+                if (isMagicNumberODS(fpath))
+                {
+                    /*
+                     * The ODS structure is recognised, but its workbook
+                     * contents are not validated by Apache POI.
+                     */
+                    return new DetectionResult(SpreadsheetFormat.ODS, BiffVersion.UNKNOWN, false);
+                }
+
+                if (isXlsxPackage(fpath))
+                {
+                    boolean valid = isPoiValidWorkbook(fpath);
+                    return new DetectionResult(SpreadsheetFormat.XLSX, BiffVersion.UNKNOWN, valid);
+                }
             }
         }
 
-        // 2. ZIP-based formats: XLSX or ODS.
-        if (hasSignature(path, ZIP_SIGNATURE))
-        {
-            if (isOdsFile(path))
-            {
-                // ODS is recognised from its package structure.
-                // Apache POI's standard WorkbookFactory does not
-                // validate ODS workbook contents.
-                return result(SpreadsheetFormat.ODS, BiffVersion.UNKNOWN, false);
-            }
-
-            if (isXlsxPackage(path))
-            {
-                return result(SpreadsheetFormat.XLSX, BiffVersion.UNKNOWN, isPoiValidWorkbook(path));
-            }
-        }
-
-        return result(SpreadsheetFormat.UNKNOWN, BiffVersion.UNKNOWN, false);
-    }
-
-    private static DetectionResult result(SpreadsheetFormat format, BiffVersion version, boolean poiValidated)
-    {
-        return new DetectionResult(format, version, poiValidated);
+        return new DetectionResult(SpreadsheetFormat.UNKNOWN, BiffVersion.UNKNOWN, false);
     }
 
     /**
-     * Compares the file's initial bytes with a signature.
+     * Checks whether a file begins with the specified byte signature.
+     *
+     * @param fpath
+     *        path to the file
+     * @param signature
+     *        byte signature to compare with the file's initial bytes
+     * @return {@code true} if the file begins with the specified signature, otherwise {@code false}
+     * 
+     * @throws IOException
+     *         if an I/O error occurs while reading the file
      */
-    private static boolean hasSignature(Path path, byte[] signature) throws IOException
+    private static boolean containsMagicNumber(Path fpath, byte[] signature) throws IOException
     {
-        byte[] header = new byte[signature.length];
+        int totalRead = 0;
+        byte[] buffer = new byte[signature.length];
 
-        try (InputStream in = Files.newInputStream(path))
+        try (BufferedInputStream input = new BufferedInputStream(Files.newInputStream(fpath)))
         {
-            int offset = 0;
-
-            while (offset < header.length)
+            // Read until the buffer is full or the end of the file is reached.
+            while (totalRead < buffer.length)
             {
-                int count = in.read(header, offset, header.length - offset);
+                int bytesRead = input.read(buffer, totalRead, buffer.length - totalRead);
 
-                if (count < 0)
+                if (bytesRead == -1)
                 {
                     return false;
                 }
 
-                offset += count;
+                totalRead += bytesRead;
             }
         }
 
         for (int i = 0; i < signature.length; i++)
         {
-            if (header[i] != signature[i])
+            if (buffer[i] != signature[i])
             {
                 return false;
             }
@@ -166,22 +186,31 @@ public final class SpreadsheetFileDetector
     }
 
     /**
-     * Finds the BIFF workbook stream and determines its BIFF version.
+     * Identifies the BIFF version of an Excel workbook by examining the first record in its OLE
+     * workbook stream.
+     *
+     * @param fpath
+     *        path to the Excel file
+     * @return the detected BIFF version, or {@link BiffVersion#UNKNOWN} if the workbook stream is
+     *         missing or its BIFF version cannot be identified
+     * 
+     * @throws IOException
+     *         if an I/O error occurs while reading the file
      */
-    private static BiffVersion detectBiffVersion(Path path) throws IOException
+    private static BiffVersion detectBiffVersion(Path fpath) throws IOException
     {
-        try (POIFSFileSystem fs = new POIFSFileSystem(path.toFile(), true))
-        {
-            String streamName;
+        String stream;
 
+        try (POIFSFileSystem fs = new POIFSFileSystem(fpath.toFile(), true))
+        {
             if (fs.getRoot().hasEntry("Workbook"))
             {
-                streamName = "Workbook";
+                stream = "Workbook";
             }
 
             else if (fs.getRoot().hasEntry("Book"))
             {
-                streamName = "Book";
+                stream = "Book";
             }
 
             else
@@ -189,23 +218,25 @@ public final class SpreadsheetFileDetector
                 return BiffVersion.UNKNOWN;
             }
 
-            try (InputStream in = fs.getRoot().createDocumentInputStream(streamName))
+            try (InputStream input = fs.getRoot().createDocumentInputStream(stream))
             {
+                int idLow = input.read();
+                int idHigh = input.read();
+                int lenLow = input.read();
+                int lenHigh = input.read();
 
-                int idLow = in.read();
-                int idHigh = in.read();
-                int lenLow = in.read();
-                int lenHigh = in.read();
-
+                // Sanity check
                 if (idLow < 0 || idHigh < 0 || lenLow < 0 || lenHigh < 0)
                 {
                     return BiffVersion.UNKNOWN;
                 }
 
-                int recordId = idLow | (idHigh << 8);
-                int recordLength = lenLow | (lenHigh << 8);
+                // Compute little-endian values
+                int recordId = (idHigh << 8) | idLow;
+                int payload = (lenHigh << 8) | lenLow;
 
-                if (recordLength < 4)
+                // Minimum payload length is 4 bytes
+                if (payload < 4)
                 {
                     return BiffVersion.UNKNOWN;
                 }
@@ -222,7 +253,12 @@ public final class SpreadsheetFileDetector
                         return BiffVersion.BIFF4;
 
                     case 0x0809:
-                        return detectBiff5Or8(in);
+                        if (payload < 16)
+                        {
+                            return BiffVersion.UNKNOWN;
+                        }
+
+                        return detectBiff5Or8(input);
 
                     default:
                         return BiffVersion.UNKNOWN;
@@ -233,18 +269,26 @@ public final class SpreadsheetFileDetector
 
     /**
      * Reads the BOF version field following the four-byte record header.
+     *
+     * @param input
+     *        starting stream positioned at the BOF record payload
+     * @return the detected BIFF5 or BIFF8 version, or {@link BiffVersion#UNKNOWN} if the version
+     *         field is truncated or unrecognised
+     * 
+     * @throws IOException
+     *         if an I/O error occurs while reading the stream
      */
-    private static BiffVersion detectBiff5Or8(InputStream in) throws IOException
+    private static BiffVersion detectBiff5Or8(InputStream input) throws IOException
     {
-        int versionLow = in.read();
-        int versionHigh = in.read();
+        int versionLow = input.read();
+        int versionHigh = input.read();
 
         if (versionLow < 0 || versionHigh < 0)
         {
             return BiffVersion.UNKNOWN;
         }
 
-        int version = versionLow | (versionHigh << 8);
+        int version = (versionHigh << 8) | versionLow;
 
         switch (version)
         {
@@ -262,7 +306,7 @@ public final class SpreadsheetFileDetector
     /**
      * Recognises ODS by its MIME type and expected content entry.
      */
-    private static boolean isOdsFile(Path path)
+    private static boolean isMagicNumberODS(Path path)
     {
         try (ZipFile zip = new ZipFile(path.toFile()))
         {
@@ -335,8 +379,8 @@ public final class SpreadsheetFileDetector
 
             return contentTypes != null && workbookXml != null && !contentTypes.isDirectory() && !workbookXml.isDirectory();
         }
-        
-        catch (IOException | RuntimeException e)
+
+        catch (IOException exc)
         {
             return false;
         }
@@ -347,13 +391,12 @@ public final class SpreadsheetFileDetector
      */
     private static boolean isPoiValidWorkbook(Path path)
     {
-
         try (Workbook workbook = WorkbookFactory.create(path.toFile()))
         {
             return workbook.getNumberOfSheets() > 0;
         }
-        
-        catch (IOException | RuntimeException e)
+
+        catch (IOException exc)
         {
             return false;
         }
@@ -364,15 +407,13 @@ public final class SpreadsheetFileDetector
      */
     public static void main(String[] args)
     {
-        if (args.length != 1)
-        {
-            System.out.println("Usage: java SpreadsheetFileDetector <file>");
-            return;
-        }
+        Path path = Paths.get("src/io/test/Praveen_batch_list.xlsx");
 
         try
         {
-            DetectionResult result = detect(Paths.get(args[0]));
+            DetectionResult result = detect(path);
+
+            System.out.println("File: " + path.getFileName());
 
             System.out.println("Format: " + result.getFormat());
 
@@ -385,13 +426,13 @@ public final class SpreadsheetFileDetector
             {
                 System.out.println("Apache POI validation: not applicable");
             }
-            
+
             else
             {
                 System.out.println("Apache POI validation: " + result.isPoiValidated());
             }
         }
-        
+
         catch (IOException e)
         {
             System.err.println("Unable to read file: " + e.getMessage());
