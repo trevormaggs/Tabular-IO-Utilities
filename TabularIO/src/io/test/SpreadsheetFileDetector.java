@@ -199,18 +199,18 @@ public final class SpreadsheetFileDetector
      */
     private static BiffVersion detectBiffVersion(Path fpath) throws IOException
     {
-        String stream;
+        String streamName;
 
         try (POIFSFileSystem fs = new POIFSFileSystem(fpath.toFile(), true))
         {
             if (fs.getRoot().hasEntry("Workbook"))
             {
-                stream = "Workbook";
+                streamName = "Workbook";
             }
 
             else if (fs.getRoot().hasEntry("Book"))
             {
-                stream = "Book";
+                streamName = "Book";
             }
 
             else
@@ -218,7 +218,7 @@ public final class SpreadsheetFileDetector
                 return BiffVersion.UNKNOWN;
             }
 
-            try (InputStream input = fs.getRoot().createDocumentInputStream(stream))
+            try (InputStream input = fs.getRoot().createDocumentInputStream(streamName))
             {
                 int idLow = input.read();
                 int idHigh = input.read();

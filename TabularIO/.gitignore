@@ -1,4 +1,6 @@
 /bin/
-*.jar
 src/io/test/xl
-Praveen_batch_list.xlsx
+*.jar
+*.xls
+*.xlsx
+*.pdf
