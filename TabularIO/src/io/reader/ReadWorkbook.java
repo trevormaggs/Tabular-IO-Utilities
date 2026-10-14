@@ -15,7 +15,9 @@ import java.util.regex.PatternSyntaxException;
 import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.CellValue;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.FormulaEvaluator;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -53,6 +55,8 @@ public class ReadWorkbook implements ExcelReadable
     private SheetDimension matrixsize;
     protected Workbook workbook;
     protected Sheet sheet;
+
+    private final DataFormatter dataFormatter = new DataFormatter();
 
     /**
      * Constructs a {@code ReadWorkbook} instance targeting the specified spreadsheet file.
@@ -277,6 +281,7 @@ public class ReadWorkbook implements ExcelReadable
                 if (row != null)
                 {
                     Pattern pattern = null;
+                    
                     try
                     {
                         pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
@@ -488,7 +493,8 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Formats a cell value as a string. Formula cells are represented by their formula expressions.
+     * Formats a cell value as a string. Formula cells are evaluated to return their calculated
+     * results.
      *
      * @param cell
      *        Apache POI cell to format
@@ -498,33 +504,45 @@ public class ReadWorkbook implements ExcelReadable
     {
         if (cell != null)
         {
-            CellType type = cell.getCellType();
-
-            switch (type)
+            if (cell.getCellType() == CellType.FORMULA)
             {
-                case NUMERIC:
-                    if (DateUtil.isCellDateFormatted(cell))
+                if (workbook != null)
+                {
+                    try
                     {
-                        return cell.getDateCellValue().toString().trim();
+                        FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+                        CellValue value = evaluator.evaluate(cell);
+
+                        if (value != null)
+                        {
+                            switch (value.getCellType())
+                            {
+                                case NUMERIC:
+                                case STRING:
+                                case BOOLEAN:
+                                    return dataFormatter.formatCellValue(cell, evaluator).trim();
+
+                                case ERROR:
+                                    return "ERROR: " + value.getErrorValue();
+
+                                default:
+                                    return "";
+                            }
+                        }
                     }
 
-                    return String.valueOf(cell.getNumericCellValue()).trim();
+                    catch (Exception exc)
+                    {
+                        // Just pass through
+                    }
+                }
 
-                case STRING:
-                case BLANK:
-                    return cell.getStringCellValue().trim();
-
-                case BOOLEAN:
-                    return Boolean.toString(cell.getBooleanCellValue());
-
-                case FORMULA:
-                    return cell.getCellFormula().trim();
-
-                default:
-                    return "";
+                return cell.getCellFormula().trim();
             }
-        }
 
+            return dataFormatter.formatCellValue(cell).trim();
+        }
+        
         return "";
     }
 

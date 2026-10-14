@@ -14,17 +14,17 @@ public class TestWorkbook
     {
         try
         {
-            ReadWorkbook book = new ReadWorkbook(Paths.get("src\\io\\test\\Praveen_batch_list.xlsx"), 1);
-            Iterator<String[]> it = book.iterator();
-
+            ReadWorkbook book = new ReadWorkbook(Paths.get("src\\io\\test\\TurramurraHomeConstruction.xlsx"), "Projected costs");
             book.open();
             // book.setWorksheet("tab2");
+
+            Iterator<String[]> it = book.iterator();
 
             System.out.printf("%s%n", book.getFilePath());
             System.out.printf("%s%n", book.getWorksheetName());
 
-            System.out.printf("%s%n", book.findColumnIndexByContent("server hostname"));
-            System.out.printf("%s%n", book.findColumnIndexByContent("group"));
+            System.out.printf("%s%n", book.findColumnIndexByContent("Amount"));
+            System.out.printf("%s%n", book.findColumnIndexByContent("Category"));
             System.out.printf("%s%n", book.findColumnIndexByContent("Owner name"));
 
             while (it.hasNext())
@@ -93,7 +93,7 @@ public class TestWorkbook
 
     public static void main(String[] args)
     {
-        //testReadWorkbook();
-        testAlternatingRowFactory();
+        testReadWorkbook();
+        //testAlternatingRowFactory();
     }
 }
