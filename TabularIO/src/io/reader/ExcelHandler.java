@@ -1,8 +1,8 @@
 package io.reader;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.function.Consumer;
 import org.apache.poi.ss.usermodel.BuiltinFormats;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.eventusermodel.ReadOnlySharedStringsTable;
@@ -35,8 +35,7 @@ class ExcelHandler extends DefaultHandler
     private final int minColumns;
     private final StringBuilder sbValue;
     private final List<String> cellData;
-    private final List<String[]> rowCache;
-
+    private final Consumer<String[]> rowConsumer;
     private XssfDataType nextDataType;
     private boolean hasCellValue;
     private boolean inlineValue;
@@ -46,6 +45,7 @@ class ExcelHandler extends DefaultHandler
     private int maxColumnSize;
     private int currentRow;
     private int currentCol;
+    private int rowCount;
 
     /**
      * Identifies the cell data types handled by this parser.
@@ -65,18 +65,26 @@ class ExcelHandler extends DefaultHandler
      * @param minCol
      *        minimum number of columns in each cached row; non-positive values disable padding
      */
-    ExcelHandler(ReadOnlySharedStringsTable sst, StylesTable sty, int minCol)
+    ExcelHandler(ReadOnlySharedStringsTable sst, StylesTable sty, int minCol, Consumer<String[]> rowConsumer)
     {
-        this.sharedStringsTable = sst;
-        this.stylesTable = sty;
-        this.minColumns = Math.max(0, minCol);
-        this.cellData = new ArrayList<>();
-        this.rowCache = new ArrayList<>();
-        this.sbValue = new StringBuilder();
-        this.formatter = (sty != null ? new DataFormatter() : null);
-        this.maxColumnSize = 0;
-        this.currentRow = -1;
-        this.currentCol = -1;
+        if (rowConsumer != null)
+        {
+            this.sharedStringsTable = sst;
+            this.stylesTable = sty;
+            this.minColumns = Math.max(0, minCol);
+            this.rowConsumer = rowConsumer;
+            this.cellData = new ArrayList<>();
+            this.sbValue = new StringBuilder();
+            this.formatter = (sty != null ? new DataFormatter() : null);
+            this.maxColumnSize = 0;
+            this.rowCount = 0;
+            this.currentRow = -1;
+            this.currentCol = -1;
+
+            return;
+        }
+
+        throw new IllegalArgumentException("RowConsumer cannot be null in consumer-only streaming mode.");
     }
 
     /**
@@ -85,9 +93,9 @@ class ExcelHandler extends DefaultHandler
      * @param sst
      *        shared-strings table used to resolve shared-string cells
      */
-    ExcelHandler(ReadOnlySharedStringsTable sst)
+    ExcelHandler(ReadOnlySharedStringsTable sst, Consumer<String[]> rowConsumer)
     {
-        this(sst, null, -1);
+        this(sst, null, -1, rowConsumer);
     }
 
     /**
@@ -98,22 +106,9 @@ class ExcelHandler extends DefaultHandler
      * @param minCol
      *        minimum number of columns in each cached row
      */
-    ExcelHandler(ReadOnlySharedStringsTable sst, int minCol)
+    ExcelHandler(ReadOnlySharedStringsTable sst, StylesTable sty, Consumer<String[]> rowConsumer)
     {
-        this(sst, null, minCol);
-    }
-
-    /**
-     * Creates a handler with support for cell number and date formatting.
-     *
-     * @param sst
-     *        shared-strings table used to resolve shared-string cells
-     * @param sty
-     *        worksheet styles table used to resolve cell formats
-     */
-    ExcelHandler(ReadOnlySharedStringsTable sst, StylesTable sty)
-    {
-        this(sst, sty, -1);
+        this(sst, sty, -1, rowConsumer);
     }
 
     /**
@@ -129,7 +124,7 @@ class ExcelHandler extends DefaultHandler
 
     private boolean textTagVisited(String qname)
     {
-        return "v".equals(qname) || ("t".equals(qname) && inlineValue);
+        return qname.equals("v") || (qname.equals("t") && inlineValue);
     }
 
     /**
@@ -141,7 +136,7 @@ class ExcelHandler extends DefaultHandler
      */
     private boolean inlineStrTagVisited(String qname)
     {
-        return "is".equals(qname);
+        return qname.equals("is");
     }
 
     /**
@@ -153,7 +148,7 @@ class ExcelHandler extends DefaultHandler
      */
     private boolean rowVisited(String qname)
     {
-        return "row".equals(qname);
+        return qname.equals("row");
     }
 
     /**
@@ -165,7 +160,7 @@ class ExcelHandler extends DefaultHandler
      */
     private boolean cellVisited(String qname)
     {
-        return "c".equals(qname);
+        return qname.equals("c");
     }
 
     /**
@@ -225,47 +220,43 @@ class ExcelHandler extends DefaultHandler
             String cellType = attributes.getValue("t");
             String cellStyle = attributes.getValue("s");
 
-            // Hard-reset cell-specific state to prevent state leakage between cells
-            hasCellValue = false;
-            sbValue.setLength(0);
             formatIndex = -1;
             formatString = null;
+            hasCellValue = false;
+            sbValue.setLength(0);
             cellRef = attributes.getValue("r");
 
-            if ("b".equals(cellType))
+            switch (cellType)
             {
-                nextDataType = XssfDataType.BOOLEAN;
+                case "b":
+                    nextDataType = XssfDataType.BOOLEAN;
+                break;
+
+                case "e":
+                    nextDataType = XssfDataType.ERROR;
+                break;
+
+                case "inlineStr":
+                    nextDataType = XssfDataType.INLINE_STRING;
+                break;
+
+                case "s":
+                    nextDataType = XssfDataType.SST_STRING;
+                break;
+
+                case "str":
+                    nextDataType = XssfDataType.FORMULA;
+                break;
+
+                default:
+                    nextDataType = XssfDataType.NUMBER;
+
+                    if (stylesTable != null && cellStyle != null)
+                    {
+                        readCellFormat(cellStyle);
+                    }
             }
 
-            else if ("e".equals(cellType))
-            {
-                nextDataType = XssfDataType.ERROR;
-            }
-
-            else if ("inlineStr".equals(cellType))
-            {
-                nextDataType = XssfDataType.INLINE_STRING;
-            }
-
-            else if ("s".equals(cellType))
-            {
-                nextDataType = XssfDataType.SST_STRING;
-            }
-
-            else if ("str".equals(cellType))
-            {
-                nextDataType = XssfDataType.FORMULA;
-            }
-
-            else
-            {
-                nextDataType = XssfDataType.NUMBER;
-
-                if (stylesTable != null && cellStyle != null)
-                {
-                    readCellFormat(cellStyle);
-                }
-            }
         }
     }
 
@@ -315,16 +306,14 @@ class ExcelHandler extends DefaultHandler
     @Override
     public void endElement(String uri, String localName, String qname) throws SAXException
     {
-        if ("v".equals(qname) && !inlineValue)
+        if (!inlineValue && qname.equals("v"))
         {
-            // A normal cell value is complete.
             appendCellValue();
             hasCellValue = false;
         }
 
         else if (inlineStrTagVisited(qname))
         {
-            // All text runs in the inline string have been accumulated.
             appendCellValue();
             inlineValue = false;
             hasCellValue = false;
@@ -340,7 +329,8 @@ class ExcelHandler extends DefaultHandler
 
             if (!cellData.isEmpty())
             {
-                rowCache.add(cellData.toArray(new String[0]));
+                rowCount++;
+                rowConsumer.accept(cellData.toArray(new String[0]));
             }
 
             cellData.clear();
@@ -348,14 +338,14 @@ class ExcelHandler extends DefaultHandler
         }
     }
 
-    public void clearCachedRow()
+    /**
+     * Returns the total number of parsed rows streamed so far.
+     *
+     * @return row count
+     */
+    public int getRowCount()
     {
-        rowCache.clear();
-    }
-
-    public int getCachedRowHeight()
-    {
-        return rowCache.size();
+        return rowCount;
     }
 
     /**
@@ -367,16 +357,6 @@ class ExcelHandler extends DefaultHandler
     public int getMaximumMatrixWidth()
     {
         return maxColumnSize;
-    }
-
-    /**
-     * Returns an iterator over the cached row arrays.
-     *
-     * @return row iterator
-     */
-    public Iterator<String[]> rowIterator()
-    {
-        return rowCache.iterator();
     }
 
     /**
@@ -506,8 +486,8 @@ class ExcelHandler extends DefaultHandler
 
                 catch (NumberFormatException | IndexOutOfBoundsException exc)
                 {
-                    // Revert to the raw value as a fallback when shared string tables are not
-                    // matched
+                    // Fallback to the raw value when shared
+                    // string tables are not matched
                     value = rawValue;
                 }
             break;

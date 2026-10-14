@@ -281,7 +281,7 @@ public class ReadWorkbook implements ExcelReadable
                 if (row != null)
                 {
                     Pattern pattern = null;
-                    
+
                     try
                     {
                         pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
@@ -502,48 +502,40 @@ public class ReadWorkbook implements ExcelReadable
      */
     private String formatCellToString(Cell cell)
     {
-        if (cell != null)
+        if (cell.getCellType() == CellType.FORMULA)
         {
-            if (cell.getCellType() == CellType.FORMULA)
+            try
             {
-                if (workbook != null)
+                FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
+                CellValue value = evaluator.evaluate(cell);
+
+                if (value != null)
                 {
-                    try
+                    switch (value.getCellType())
                     {
-                        FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
-                        CellValue value = evaluator.evaluate(cell);
+                        case NUMERIC:
+                        case STRING:
+                        case BOOLEAN:
+                            return dataFormatter.formatCellValue(cell, evaluator).trim();
 
-                        if (value != null)
-                        {
-                            switch (value.getCellType())
-                            {
-                                case NUMERIC:
-                                case STRING:
-                                case BOOLEAN:
-                                    return dataFormatter.formatCellValue(cell, evaluator).trim();
+                        case ERROR:
+                            return "ERROR: " + value.getErrorValue();
 
-                                case ERROR:
-                                    return "ERROR: " + value.getErrorValue();
-
-                                default:
-                                    return "";
-                            }
-                        }
-                    }
-
-                    catch (Exception exc)
-                    {
-                        // Just pass through
+                        default:
+                            return "";
                     }
                 }
-
-                return cell.getCellFormula().trim();
+            }
+            
+            catch (Exception exc)
+            {
+                // Fallback to raw formula string if evaluation fails
             }
 
-            return dataFormatter.formatCellValue(cell).trim();
+            return cell.getCellFormula().trim();
         }
-        
-        return "";
+
+        return dataFormatter.formatCellValue(cell).trim();
     }
 
     /**

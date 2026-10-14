@@ -7,10 +7,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -41,32 +41,32 @@ import io.TabularDataException.ErrorCode;
 /**
  * Reads Excel XLSX workbooks using Apache POI’s event-based API to reduce memory consumption when
  * processing large worksheets.
- * 
+ *
  * <p>
  * Implements {@link ExcelReadable} to provide tabular access to worksheet data without constructing
  * a complete in-memory worksheet model, such as a memory-intensive DOM model and other
  * alternatives.
  * </p>
- * 
+ *
  * <p>
  * Worksheet XML is parsed using a SAX parser, allowing cell data to be processed incrementally
  * rather than loading the entire worksheet into a DOM tree. This approach can reduce memory
  * consumption, although actual usage depends on the workbook contents and the data retained by the
  * reader.
  * </p>
- * 
+ *
  * <p>
  * Shared strings are accessed through Apache POI’s {@link ReadOnlySharedStringsTable}, which
  * provides read-only access to shared-string data without requiring the standard mutable shared
  * strings table.
  * </p>
- * 
+ *
  * <p>
  * Cell values are exposed as strings. Loading the workbook’s style table is optional and enables
  * style-dependent interpretation of values, such as dates and specially formatted numbers. The
  * style table can be excluded when this interpretation is not required.
  * </p>
- * 
+ *
  * <p>
  * <b>Change history:</b>
  * </p>
@@ -80,20 +80,20 @@ import io.TabularDataException.ErrorCode;
  * @version 0.5
  * @since 10 December 2017
  */
-public class EventExcelReader implements ExcelReadable, Iterable<String[]>
+public class EventExcelReader implements ExcelReadable
 {
     private final Path filePath;
     private final boolean useStyleTable;
     private final Object tabParam;
     private ExcelHandler handler;
-    private String activeSheetName;
+    private String currentSheet;
 
     /**
      * Creates a reader for the specified workbook, selecting its first worksheet.
      *
      * @param fpath
      *        path to the XLSX workbook
-     * 
+     *
      * @throws TabularDataException
      *         if the path is invalid or the file is not an XLSX file
      */
@@ -109,7 +109,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      *        path to the XLSX workbook
      * @param useStyleTable
      *        whether to load the workbook's style table
-     * 
+     *
      * @throws TabularDataException
      *         if the path is invalid or the file is not an XLSX file
      */
@@ -128,7 +128,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      * @param tabParam
      *        zero-based worksheet index or worksheet name or {@code null} selects the first
      *        worksheet
-     * 
+     *
      * @throws TabularDataException
      *         if the path is invalid or the file is not an XLSX file
      */
@@ -186,17 +186,28 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     {
         if (tabParam instanceof String)
         {
-            readWorksheet((String) tabParam);
+            currentSheet = (String) tabParam;
         }
 
         else if (tabParam instanceof Integer)
         {
-            readWorksheet(((Integer) tabParam).intValue());
+            int index = ((Integer) tabParam).intValue();
+            List<String> sheets = fetchWorksheetList(filePath);
+
+            if (index >= 0 && index < sheets.size())
+            {
+                currentSheet = sheets.get(index);
+            }
+
+            else
+            {
+                throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet index [" + index + "] is out of bounds.");
+            }
         }
 
         else
         {
-            readWorksheet(0);
+            currentSheet = null;
         }
     }
 
@@ -211,10 +222,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     @Override
     public void close()
     {
-        if (handler != null && handler.rowIterator() != null)
-        {
-            handler.clearCachedRow();
-        }
+        handler = null;
     }
 
     /**
@@ -225,7 +233,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     @Override
     public int getRowCount()
     {
-        return (handler != null ? handler.getCachedRowHeight() : 0);
+        return (handler != null ? handler.getRowCount() : 0);
     }
 
     /**
@@ -258,30 +266,58 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     @Override
     public int findColumnIndexByContent(String entry, int rowIndex)
     {
-        if (handler != null && rowIndex >= 0 && rowIndex < handler.getCachedRowHeight())
-        {
-            int currentIndex = 0;
+        // Streaming lookup for column index at a given row
+        final int targetRow = rowIndex;
+        final String searchEntry = entry != null ? entry.trim() : "";
+        final int[] foundCol = {-1};
 
-            for (String[] arr : this)
+        try
+        {
+            Consumer<String[]> finderConsumer = new Consumer<String[]>()
             {
-                if (currentIndex == rowIndex)
+                private int currentRow = 0;
+
+                @Override
+                public void accept(String[] row)
                 {
-                    for (int j = 0; j < arr.length; j++)
+                    if (currentRow == targetRow)
                     {
-                        if (arr[j] != null && arr[j].trim().equalsIgnoreCase(entry != null ? entry.trim() : ""))
+                        for (int j = 0; j < row.length; j++)
                         {
-                            return j;
+                            if (row[j] != null && row[j].trim().equalsIgnoreCase(searchEntry))
+                            {
+                                foundCol[0] = j;
+                                break;
+                            }
                         }
                     }
 
-                    break;
+                    currentRow++;
                 }
+            };
 
-                currentIndex++;
+            if (tabParam instanceof String)
+            {
+                readWorksheet((String) tabParam, finderConsumer);
+            }
+
+            else if (tabParam instanceof Integer)
+            {
+                readWorksheet(((Integer) tabParam).intValue(), finderConsumer);
+            }
+
+            else
+            {
+                readWorksheet(0, finderConsumer);
             }
         }
 
-        return -1;
+        catch (Exception exc)
+        {
+            return -1;
+        }
+
+        return foundCol[0];
     }
 
     /**
@@ -303,7 +339,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     @Override
     public int findColumnIndexRegex(String regex, int rowIndex)
     {
-        if (handler == null || regex == null || rowIndex < 0 || rowIndex >= getRowCount())
+        if (regex == null || rowIndex < 0)
         {
             return -1;
         }
@@ -320,50 +356,59 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
             pattern = Pattern.compile(Pattern.quote(regex), Pattern.CASE_INSENSITIVE);
         }
 
-        int currentIndex = 0;
+        final int targetRow = rowIndex;
+        final Pattern targetPattern = pattern;
+        final int[] foundCol = {-1};
 
-        for (String[] arr : this)
+        try
         {
-            if (currentIndex == rowIndex)
+            Consumer<String[]> finderConsumer = new Consumer<String[]>()
             {
-                for (int j = 0; j < arr.length; j++)
+                private int currentRow = 0;
+
+                @Override
+                public void accept(String[] row)
                 {
-                    Matcher matcher = pattern.matcher(arr[j] != null ? arr[j].trim() : "");
-
-                    if (matcher.matches())
+                    if (currentRow == targetRow)
                     {
-                        return j;
-                    }
-                }
+                        for (int j = 0; j < row.length; j++)
+                        {
+                            Matcher matcher = targetPattern.matcher(row[j] != null ? row[j].trim() : "");
 
-                break;
+                            if (matcher.matches())
+                            {
+                                foundCol[0] = j;
+                                break;
+                            }
+                        }
+                    }
+
+                    currentRow++;
+                }
+            };
+
+            if (tabParam instanceof String)
+            {
+                readWorksheet((String) tabParam, finderConsumer);
             }
 
-            currentIndex++;
+            else if (tabParam instanceof Integer)
+            {
+                readWorksheet(((Integer) tabParam).intValue(), finderConsumer);
+            }
+
+            else
+            {
+                readWorksheet(0, finderConsumer);
+            }
         }
 
-        return -1;
-    }
-
-    /**
-     * Returns an iterator over the rows of the active worksheet.
-     *
-     * <p>
-     * Each row is represented by a {@code String[]} containing the cell values specified by the
-     * worksheet handler. If no handler or row iterator is available, an empty iterator is returned.
-     * </p>
-     *
-     * @return iterator over the active worksheet's rows, or an empty iterator
-     */
-    @Override
-    public Iterator<String[]> iterator()
-    {
-        if (handler == null || handler.rowIterator() == null)
+        catch (Exception exc)
         {
-            return Collections.emptyIterator();
+            return -1;
         }
 
-        return handler.rowIterator();
+        return foundCol[0];
     }
 
     /**
@@ -374,7 +419,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     @Override
     public String getWorksheetName()
     {
-        return activeSheetName;
+        return currentSheet;
     }
 
     /**
@@ -401,6 +446,63 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
         }
     }
 
+    @Override
+    public Iterator<String[]> iterator()
+    {
+        throw new UnsupportedOperationException("EventExcelReader operates in consumer-only streaming mode and does not support iteration.");
+    }
+
+    /**
+     * Required by ExcelReadable interface (defaults to a no-op consumer if none provided).
+     */
+    @Override
+    public void readWorksheet(String tabName) throws TabularDataException
+    {
+        readWorksheet(tabName, null);
+    }
+
+    /**
+     * Required by ExcelReadable interface (defaults to a no-op consumer if none provided).
+     */
+    @Override
+    public void readWorksheet(int tabIndex) throws TabularDataException
+    {
+        readWorksheet(tabIndex, null);
+    }
+
+    /**
+     * - Reads the currently configured
+     * worksheet, streaming each row to the provided consumer.
+     *
+     * -
+     * 
+     * @throws TabularDataException
+     *         - if no
+     *         worksheet has been specified or configured
+     */
+    public void readWorksheet(Consumer<String[]> rowConsumer) throws TabularDataException
+    {
+        if (currentSheet != null && !currentSheet.isEmpty())
+        {
+            readWorksheet(currentSheet, rowConsumer);
+        }
+
+        else if (tabParam instanceof String)
+        {
+            readWorksheet((String) tabParam, rowConsumer);
+        }
+
+        else if (tabParam instanceof Integer)
+        {
+            readWorksheet(((Integer) tabParam).intValue(), rowConsumer);
+        }
+
+        else
+        {
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "No worksheet has been specified for this reader instance.");
+        }
+    }
+
     /**
      * Reads the specified worksheet and makes its rows available to this reader.
      *
@@ -412,18 +514,26 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      * @param tabName
      *        name of the worksheet to read, or {@code null} or an empty string to select the first
      *        worksheet
-     * 
+     *
      * @throws TabularDataException
      *         if an I/O, workbook-processing, or XML-parsing error occurs
      */
-    @Override
-    public void readWorksheet(String tabName) throws TabularDataException
+    private void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
     {
         if (tabName == null || tabName.isEmpty())
         {
-            readWorksheet(0);
+            readWorksheet(0, rowConsumer);
             return;
         }
+
+        final Consumer<String[]> activeConsumer = (rowConsumer != null ? rowConsumer : new Consumer<String[]>()
+        {
+            @Override
+            public void accept(String[] row)
+            {
+                // No-op
+            }
+        });
 
         try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
         {
@@ -431,7 +541,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
             XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
             ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable()) : new ExcelHandler(sst));
+            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), activeConsumer) : new ExcelHandler(sst, activeConsumer));
 
             while (iter.hasNext())
             {
@@ -439,17 +549,16 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
                 {
                     if (tabName.equalsIgnoreCase(iter.getSheetName()))
                     {
-                        activeSheetName = iter.getSheetName();
+                        currentSheet = iter.getSheetName();
                         parseSheet(stream);
                         break;
                     }
                 }
             }
         }
-
         catch (IOException | OpenXML4JException | SAXException exc)
         {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error reading sheet [" + tabName + "] in [" + filePath + "]", exc);
+            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet [" + tabName + "] in [" + filePath + "]", exc);
         }
     }
 
@@ -459,22 +568,29 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      *
      * @param tabIndex
      *        zero-based index of the worksheet to read
-     * 
+     *
      * @throws TabularDataException
      *         if an I/O, workbook-processing, or XML-parsing error occurs
      */
-    @Override
-    public void readWorksheet(int tabIndex) throws TabularDataException
+    private void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
     {
+        final Consumer<String[]> activeConsumer = (rowConsumer != null) ? rowConsumer : new Consumer<String[]>()
+        {
+            @Override
+            public void accept(String[] row)
+            {
+                // No-op
+            }
+        };
+
         try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
         {
+            int currentIndex = 0;
             XSSFReader xssfReader = new XSSFReader(pkg);
             XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
             ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable()) : new ExcelHandler(sst));
-
-            int currentIndex = 0;
+            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), activeConsumer) : new ExcelHandler(sst, activeConsumer));
 
             while (iter.hasNext())
             {
@@ -482,7 +598,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
                 {
                     if (currentIndex == tabIndex)
                     {
-                        activeSheetName = iter.getSheetName();
+                        currentSheet = iter.getSheetName();
                         parseSheet(stream);
                         break;
                     }
@@ -494,7 +610,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
 
         catch (IOException | OpenXML4JException | SAXException exc)
         {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error reading sheet index [" + tabIndex + "] in [" + filePath + "]", exc);
+            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet index [" + tabIndex + "] in [" + filePath + "]", exc);
         }
     }
 
@@ -505,11 +621,11 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      * It uses a StAX event reader to inspect the workbook metadata without building a DOM tree of
      * the XML document. Worksheet names are returned in workbook order.
      * </p>
-     * 
+     *
      * @param fpath
      *        to the XLSX workbook
      * @return worksheet names in workbook order
-     * 
+     *
      * @throws TabularDataException
      *         if the workbook cannot be opened or its worksheet metadata cannot be read
      */
@@ -573,7 +689,7 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
      *        input stream containing worksheet XML
      * @throws SAXException
      *         if SAX parsing fails
-     * 
+     *
      * @throws IOException
      *         if an I/O error occurs while parsing the stream
      * @throws IllegalStateException
@@ -600,36 +716,36 @@ public class EventExcelReader implements ExcelReadable, Iterable<String[]>
     {
         Path file = Paths.get("src/io/test", "Praveen_batch_list.xlsx");
 
-        // Ensure the reader's cached worksheet data is cleared when processing ends.
-        try (ExcelReadable reader = new EventExcelReader(file, true, "qantas.com"))
+        // Instantiate without a default sheet to test late binding / exception safety
+        try (EventExcelReader reader = new EventExcelReader(file, true))
         {
             reader.open();
 
+            // Stream rows from a specifically named worksheet
+            reader.readWorksheet("qantas.com", new Consumer<String[]>()
+            {
+                @Override
+                public void accept(String[] row)
+                {
+                    System.out.println(Arrays.toString(row));
+                }
+            });
+
             System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
-            System.out.printf("Rows: %d, Columns: %d%n", reader.getRowCount(), reader.getColumnCount());
 
-            // Loop over current sheet rows
-            for (String[] row : reader)
+            // Switch and stream another worksheet ("Sheet1") by name
+            reader.readWorksheet("Sheet1", new Consumer<String[]>()
             {
-                System.out.println(Arrays.toString(row));
-            }
-
-            // Switch and parse a specific worksheet
-            reader.readWorksheet("Sheet1");
-
-            System.out.printf("%n--- Data from sheet: %s ---%n", reader.getWorksheetName());
-
-            for (String[] row : reader)
-            {
-                System.out.println(Arrays.toString(row));
-            }
+                @Override
+                public void accept(String[] row)
+                {
+                    System.out.println(Arrays.toString(row));
+                }
+            });
         }
-
         catch (TabularDataException exc)
         {
-            // Single consolidated exception catch block for downstream handling
             System.err.printf("Engine error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
-
             exc.printStackTrace();
         }
     }
