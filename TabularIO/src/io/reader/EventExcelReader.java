@@ -7,9 +7,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -88,6 +93,128 @@ public class EventExcelReader implements ExcelReadable
     private final Object tabParam;
     private ExcelHandler handler;
     private String currentSheet;
+
+    public abstract static class RowMapConsumer implements Consumer<String[]>
+    {
+        private final boolean hasHeaders;
+        private final Set<String> selectedColumns;
+        private String[] headers;
+        private int rowIndex;
+
+        private String[] normaliseHeaders(String[] row)
+        {
+            Set<String> used = new HashSet<>();
+            String[] result = new String[row.length];
+
+            for (int i = 0; i < row.length; i++)
+            {
+                String baseName = (row[i] != null ? row[i].trim() : "");
+
+                if (baseName.isEmpty())
+                {
+                    baseName = "Column" + i;
+                }
+
+                int suffix = 2;
+                String name = baseName;
+
+                while (!used.add(name))
+                {
+                    name = baseName + "_" + suffix++;
+                }
+
+                result[i] = name;
+            }
+
+            return result;
+        }
+
+        /**
+         * Creates a header-mapped consumer, assuming the first row contains headers.
+         */
+        public RowMapConsumer()
+        {
+            this(true, (String[]) null);
+        }
+
+        /**
+         * Creates a consumer with explicit control over header presence.
+         *
+         * @param hasHeaders
+         *        whether the first row contains headers
+         */
+        public RowMapConsumer(boolean hasHeaders)
+        {
+            this(hasHeaders, (String[]) null);
+        }
+
+        /**
+         * Creates a consumer that processes only the specified columns,
+         * assuming the first row contains headers.
+         *
+         * @param columns
+         *        column header names to include in each row map
+         */
+        public RowMapConsumer(String...columns)
+        {
+            this(true, columns);
+        }
+
+        /**
+         * Creates a consumer that processes only the specified columns.
+         *
+         * @param hasHeaders
+         *        whether the first row contains headers
+         * @param columns
+         *        column names to include in each row map
+         */
+        public RowMapConsumer(boolean hasHeaders, String...columns)
+        {
+            this.hasHeaders = hasHeaders;
+            this.rowIndex = 0;
+            this.selectedColumns = (columns != null) ? Collections.unmodifiableSet(new HashSet<>(Arrays.asList(columns))) : null;
+        }
+
+        @Override
+        public void accept(String[] row)
+        {
+            if (hasHeaders && rowIndex == 0)
+            {
+                headers = normaliseHeaders(row);
+                rowIndex++;
+
+                return;
+            }
+
+            Map<String, String> rowMap = new LinkedHashMap<>();
+
+            for (int i = 0; i < row.length; i++)
+            {
+                String colName = headers != null && i < headers.length && !headers[i].isEmpty() ? headers[i] : "Column" + i;
+
+                if (selectedColumns == null || selectedColumns.contains(colName))
+                {
+                    rowMap.put(colName, row[i]);
+                }
+            }
+
+            int actualRowIndex = (hasHeaders ? rowIndex - 1 : rowIndex);
+
+            acceptMappedRow(rowMap, actualRowIndex);
+            rowIndex++;
+        }
+
+        /**
+         * Processes a single data row mapped by its column headers or
+         * default column-index keys.
+         *
+         * @param rowMap
+         *        map of column names to cell values
+         * @param rowIndex
+         *        zero-based data row index
+         */
+        public abstract void acceptMappedRow(Map<String, String> rowMap, int rowIndex);
+    }
 
     /**
      * Creates a reader for the specified workbook, selecting its first worksheet.
@@ -755,12 +882,12 @@ public class EventExcelReader implements ExcelReadable
         Path file = Paths.get("src/io/test", "Praveen_batch_list.xlsx");
 
         // Instantiate without a default sheet to test late binding / exception safety
-        try (EventExcelReader reader = new EventExcelReader(file, true, "qantas.com1"))
+        try (EventExcelReader reader = new EventExcelReader(file, true, "qantas.com"))
         {
             // It selects the first worksheet by default unless specified
             reader.open();
 
-            System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
+            // System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
 
             // Stream rows from a specifically named worksheet
             reader.readWorksheet(new Consumer<String[]>()
@@ -768,11 +895,11 @@ public class EventExcelReader implements ExcelReadable
                 @Override
                 public void accept(String[] row)
                 {
-                    System.out.println(Arrays.toString(row));
+                    // System.out.println(Arrays.toString(row));
                 }
             });
 
-            System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
+            // System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
 
             // Switch and stream another worksheet ("Sheet1") by name
             reader.readWorksheet("Sheet1", new Consumer<String[]>()
@@ -780,7 +907,19 @@ public class EventExcelReader implements ExcelReadable
                 @Override
                 public void accept(String[] row)
                 {
-                    System.out.println(Arrays.toString(row));
+                    // System.out.println(Arrays.toString(row));
+                }
+            });
+
+            reader.readWorksheet("CDW", new RowMapConsumer("Owner name", "group")
+            {
+                @Override
+                public void acceptMappedRow(Map<String, String> rowMap, int rowIndex)
+                {
+                    String owner = rowMap.get("Owner name");
+                    String group = rowMap.get("group");
+
+                    System.out.printf("Row %d @ %s -> Name: %s -> Group: %s%n", rowIndex, reader.getWorksheetName(), owner, group);
                 }
             });
         }
