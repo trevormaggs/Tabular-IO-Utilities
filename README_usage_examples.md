@@ -76,9 +76,8 @@ This separation allows applications to work with tabular data through common int
 ## Technologies
 
 - **Java** - core programming language.
-- **Apache POI 5.5.1** - reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 - **Eclipse IDE** - development environment.
-- **Java regular expressions** - column-content searching.
+- **Apache POI 5.5.1** - reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 
 ## Java Compatibility
 
@@ -201,11 +200,11 @@ catch (TabularDataException exc)
 </details>
 
 <details>
-<summary><strong>4. Reading Excel Rows as Maps (<code>RowMapConsumer</code>)</strong></summary>
+<summary><strong>4. Reading Excel Rows as Maps (<code>RowConsumer</code>)</strong></summary>
 
-When processing worksheets with known column headers, `RowMapConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
+When processing worksheets with known column headers, `RowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
 
-The following example reads the `Owner name` and `group` columns from the `CDW` worksheet and processes each row using its header names.
+The following example reads the `Owner name` and `group` columns from the `Sheet3` worksheet and processes each row using its header names.
 
 ```java
 Path excelFile = Paths.get("data", "workbook.xlsx");
@@ -214,7 +213,7 @@ try (EventExcelReader reader = new EventExcelReader(excelFile, true))
 {
     reader.open();
 
-    reader.readWorksheet("CDW", new RowMapConsumer("Owner name", "group")
+    reader.readWorksheet("Sheet3", new RowConsumer("Owner name", "group")
     {
         @Override
         public void acceptRow(Map<String, String> rowMap, int rowIndex)
@@ -222,15 +221,13 @@ try (EventExcelReader reader = new EventExcelReader(excelFile, true))
             String owner = rowMap.get("Owner name");
             String group = rowMap.get("group");
 
-            System.out.printf("Row %d @ %s -> Name: %s -> Group: %s%n",
-                    rowIndex, reader.getWorksheetName(), owner, group);
+            System.out.printf("Row %d -> Name: %s\tGroup: %s%n", rowIndex, owner, group);
         }
     });
 }
 catch (TabularDataException exc)
 {
-    System.err.printf("Streaming error [%s]: %s%n",
-            exc.getErrorCode(), exc.getMessage());
+    System.err.printf("Streaming error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
 }
 ```
 
