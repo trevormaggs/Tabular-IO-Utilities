@@ -37,6 +37,7 @@ import org.xml.sax.XMLReader;
 import io.ExcelReadable;
 import io.TabularDataException;
 import io.TabularDataException.ErrorCode;
+import jdk.xml.internal.Utils;
 
 /**
  * Reads Excel XLSX workbooks using Apache POI’s event-based API to reduce memory consumption when
@@ -149,7 +150,7 @@ public class EventExcelReader implements ExcelReadable
             throw new TabularDataException(ErrorCode.GENERAL_ERROR, "File [" + fpath + "] is not an XLSX file.");
         }
 
-        if (tabParam != null && !(tabParam instanceof String) && !(tabParam instanceof Number))
+        if (tabParam != null && !(tabParam instanceof String) && !(tabParam instanceof Integer))
         {
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet [" + tabParam + "] is unknown or undefined.");
         }
@@ -171,15 +172,16 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Loads the configured worksheet into the reader.
+     * Selects the worksheet to be read by subsequent operations.
      *
      * <p>
-     * If a worksheet name or order index has been configured, that worksheet is selected.
-     * Otherwise, the configured zero-based worksheet index (first tab) is selected by default.
+     * If a worksheet name or zero-based index was provided to the constructor, that worksheet is
+     * selected. Otherwise, the first worksheet is selected by default. Worksheet data is parsed
+     * when a reading method is invoked.
      * </p>
      *
      * @throws TabularDataException
-     *         if an error occurs while opening the workbook or reading the selected worksheet
+     *         if the configured worksheet cannot be selected
      */
     @Override
     public void open() throws TabularDataException
@@ -189,25 +191,34 @@ public class EventExcelReader implements ExcelReadable
             currentSheet = (String) tabParam;
         }
 
-        else if (tabParam instanceof Integer)
+        else
         {
-            int index = ((Integer) tabParam).intValue();
             List<String> sheets = fetchWorksheetList(filePath);
 
-            if (index >= 0 && index < sheets.size())
+            if (tabParam instanceof Integer)
             {
-                currentSheet = sheets.get(index);
+                int index = ((Integer) tabParam).intValue();
+
+                if (index >= 0 && index < sheets.size())
+                {
+                    currentSheet = sheets.get(index);
+                }
+
+                else
+                {
+                    throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet index [" + index + "] is out of bounds.");
+                }
+            }
+
+            else if (!sheets.isEmpty())
+            {
+                currentSheet = sheets.get(0);
             }
 
             else
             {
-                throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet index [" + index + "] is out of bounds.");
+                throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "No worksheets found in workbook [" + filePath + "].");
             }
-        }
-
-        else
-        {
-            currentSheet = null;
         }
     }
 
@@ -458,7 +469,14 @@ public class EventExcelReader implements ExcelReadable
     @Override
     public void readWorksheet(String tabName) throws TabularDataException
     {
-        readWorksheet(tabName, null);
+        readWorksheet(tabName, new Consumer<String[]>()
+        {
+            @Override
+            public void accept(String[] row)
+            {
+                // No-op
+            }
+        });
     }
 
     /**
@@ -467,44 +485,32 @@ public class EventExcelReader implements ExcelReadable
     @Override
     public void readWorksheet(int tabIndex) throws TabularDataException
     {
-        readWorksheet(tabIndex, null);
+        readWorksheet(tabIndex, new Consumer<String[]>()
+        {
+            @Override
+            public void accept(String[] row)
+            {
+                // No-op
+            }
+        });
     }
 
     /**
-     * - Reads the currently configured
-     * worksheet, streaming each row to the provided consumer.
+     * Reads the currently configured worksheet, streaming each row to the provided consumer.
      *
-     * -
+     * @param rowConsumer
+     *        consumer to process each parsed row
      * 
      * @throws TabularDataException
-     *         - if no
-     *         worksheet has been specified or configured
+     *         if an error occurs during parsing
      */
     public void readWorksheet(Consumer<String[]> rowConsumer) throws TabularDataException
     {
-        if (currentSheet != null && !currentSheet.isEmpty())
-        {
-            readWorksheet(currentSheet, rowConsumer);
-        }
-
-        else if (tabParam instanceof String)
-        {
-            readWorksheet((String) tabParam, rowConsumer);
-        }
-
-        else if (tabParam instanceof Integer)
-        {
-            readWorksheet(((Integer) tabParam).intValue(), rowConsumer);
-        }
-
-        else
-        {
-            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "No worksheet has been specified for this reader instance.");
-        }
+        readWorksheet(currentSheet, rowConsumer);
     }
 
     /**
-     * Reads the specified worksheet and makes its rows available to this reader.
+     * Reads the specified worksheet and passes its rows to the specified consumer.
      *
      * <p>
      * Worksheet names are matched without regard to case. If {@code tabName} is {@code null} or
@@ -514,106 +520,120 @@ public class EventExcelReader implements ExcelReadable
      * @param tabName
      *        name of the worksheet to read, or {@code null} or an empty string to select the first
      *        worksheet
+     * @param rowConsumer
+     *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
-     *         if an I/O, workbook-processing, or XML-parsing error occurs
+     *         if the specified worksheet does not exist, or an I/O, workbook-processing, or
+     *         XML-parsing error occurs
      */
-    private void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
+    public void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
     {
-        if (tabName == null || tabName.isEmpty())
+        if (tabName != null && !Utils.isEmpty(tabName))
         {
-            readWorksheet(0, rowConsumer);
-            return;
-        }
+            boolean found = false;
 
-        final Consumer<String[]> activeConsumer = (rowConsumer != null ? rowConsumer : new Consumer<String[]>()
-        {
-            @Override
-            public void accept(String[] row)
+            try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
             {
-                // No-op
-            }
-        });
+                XSSFReader xssfReader = new XSSFReader(pkg);
+                XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+                ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-        try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
-        {
-            XSSFReader xssfReader = new XSSFReader(pkg);
-            XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
-            ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
+                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), rowConsumer) : new ExcelHandler(sst, rowConsumer));
 
-            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), activeConsumer) : new ExcelHandler(sst, activeConsumer));
-
-            while (iter.hasNext())
-            {
-                try (InputStream stream = iter.next())
+                while (iter.hasNext())
                 {
-                    if (tabName.equalsIgnoreCase(iter.getSheetName()))
+                    try (InputStream stream = iter.next())
                     {
-                        currentSheet = iter.getSheetName();
-                        parseSheet(stream);
-                        break;
+                        if (tabName.equalsIgnoreCase(iter.getSheetName()))
+                        {
+                            currentSheet = iter.getSheetName();
+                            parseSheet(stream);
+                            found = true;
+                            break;
+                        }
                     }
                 }
+
+                if (!found)
+                {
+                    throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet [" + tabName + "] not found in [" + filePath + "]");
+                }
+            }
+
+            catch (IOException | OpenXML4JException | SAXException exc)
+            {
+                throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet [" + tabName + "] in [" + filePath + "]", exc);
             }
         }
-        catch (IOException | OpenXML4JException | SAXException exc)
+
+        else
         {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet [" + tabName + "] in [" + filePath + "]", exc);
+            readWorksheet(0, rowConsumer);
         }
     }
 
     /**
-     * Reads the worksheet at the specified zero-based index and makes its rows available for this
-     * reader.
+     * Reads the worksheet at the specified zero-based index and passes its rows to the supplied
+     * consumer.
      *
      * @param tabIndex
      *        zero-based index of the worksheet to read
+     * @param rowConsumer
+     *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
-     *         if an I/O, workbook-processing, or XML-parsing error occurs
+     *         if the worksheet index is invalid, or an I/O, workbook-processing, or XML-parsing
+     *         error occurs
      */
-    private void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
+    public void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
     {
-        final Consumer<String[]> activeConsumer = (rowConsumer != null) ? rowConsumer : new Consumer<String[]>()
+        if (tabIndex >= 0)
         {
-            @Override
-            public void accept(String[] row)
+            try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
             {
-                // No-op
-            }
-        };
+                int currentIndex = 0;
+                boolean found = false;
+                XSSFReader xssfReader = new XSSFReader(pkg);
+                XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+                ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-        try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
-        {
-            int currentIndex = 0;
-            XSSFReader xssfReader = new XSSFReader(pkg);
-            XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
-            ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
+                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), rowConsumer) : new ExcelHandler(sst, rowConsumer));
 
-            handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), activeConsumer) : new ExcelHandler(sst, activeConsumer));
-
-            while (iter.hasNext())
-            {
-                try (InputStream stream = iter.next())
+                while (iter.hasNext())
                 {
-                    if (currentIndex == tabIndex)
+                    try (InputStream stream = iter.next())
                     {
-                        currentSheet = iter.getSheetName();
-                        parseSheet(stream);
-                        break;
+                        if (currentIndex == tabIndex)
+                        {
+                            currentSheet = iter.getSheetName();
+                            parseSheet(stream);
+                            found = true;
+                            break;
+                        }
                     }
+
+                    currentIndex++;
                 }
 
-                currentIndex++;
+                if (!found)
+                {
+                    throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet at index [" + tabIndex + "] not found in [" + filePath + "]");
+                }
+            }
+
+            catch (IOException | OpenXML4JException | SAXException exc)
+            {
+                throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet index [" + tabIndex + "] in [" + filePath + "]", exc);
             }
         }
 
-        catch (IOException | OpenXML4JException | SAXException exc)
+        else
         {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet index [" + tabIndex + "] in [" + filePath + "]", exc);
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Invalid worksheet index [" + tabIndex + "] in [" + filePath + "]");
         }
     }
-
+    
     /**
      * Fetches a list of current available worksheet names defined in the workbook.
      *
@@ -641,35 +661,37 @@ public class EventExcelReader implements ExcelReadable
             factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
             factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
 
-            XMLEventReader reader = factory.createXMLEventReader(workbookpart.getInputStream());
-
-            try
+            try (InputStream stream = workbookpart.getInputStream())
             {
-                while (reader.hasNext())
+                XMLEventReader reader = factory.createXMLEventReader(stream);
+
+                try
                 {
-                    XMLEvent event = reader.nextEvent();
-
-                    if (event.isStartElement())
+                    while (reader.hasNext())
                     {
-                        StartElement startElement = event.asStartElement();
-                        QName startElementName = startElement.getName();
+                        XMLEvent event = reader.nextEvent();
 
-                        if ("sheet".equalsIgnoreCase(startElementName.getLocalPart()))
+                        if (event.isStartElement())
                         {
-                            Attribute attribute = startElement.getAttributeByName(new QName("name"));
+                            StartElement startElement = event.asStartElement();
 
-                            if (attribute != null)
+                            if ("sheet".equals(startElement.getName().getLocalPart()))
                             {
-                                sheetList.add(attribute.getValue());
+                                Attribute attribute = startElement.getAttributeByName(new QName("name"));
+
+                                if (attribute != null)
+                                {
+                                    sheetList.add(attribute.getValue());
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            finally
-            {
-                reader.close();
+                finally
+                {
+                    reader.close();
+                }
             }
         }
 
@@ -743,6 +765,7 @@ public class EventExcelReader implements ExcelReadable
                 }
             });
         }
+
         catch (TabularDataException exc)
         {
             System.err.printf("Engine error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
