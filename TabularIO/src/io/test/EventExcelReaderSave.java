@@ -1,4 +1,4 @@
-package io.reader;
+package io.test;
 
 import java.io.IOException;
 import java.io.InputStream;

@@ -73,8 +73,8 @@ import jdk.xml.internal.Utils;
  * </p>
  * <ul>
  * <li>10 December 2017 — Initial implementation by Trevor Maggs.</li>
- * <li>9 October 2026 — Reorganised under {@code io.reader}, introduced
- * {@link TabularDataException}, reviewed stream handling, and standardised method ordering.</li>
+ * <li>9 October 2026 — Reorganised under {@code io.reader}, introduced {@link TabularDataException}
+ * and reviewed stream handling.</li>
  * </ul>
  *
  * @author Trevor Maggs
@@ -127,7 +127,7 @@ public class EventExcelReader implements ExcelReadable
      * @param useStyleTable
      *        whether to load the workbook's style table
      * @param tabParam
-     *        zero-based worksheet index or worksheet name or {@code null} selects the first
+     *        zero-based worksheet index or worksheet name or {@code null} to select the first
      *        worksheet
      *
      * @throws TabularDataException
@@ -172,19 +172,16 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Reads the specified worksheet and passes each row to the provided consumer.
+     * Selects the worksheet to be read by subsequent operations.
      *
-     * @param tabName
-     *        the name of the worksheet to read
-     * @param rowConsumer
-     *        the consumer that processes each row
-     * 
+     * <p>
+     * If a worksheet name or zero-based index was provided to the constructor, that worksheet is
+     * selected. Otherwise, the first worksheet is selected by default. Worksheet data is parsed
+     * when a reading method is invoked.
+     * </p>
+     *
      * @throws TabularDataException
-     *         if {@link #open()} has not been called, the worksheet cannot be
-     *         found, or an error occurs while reading the worksheet
-     * @throws NullPointerException
-     *         if {@code rowConsumer} is {@code null}, if not otherwise handled by the
-     *         implementation
+     *         if the configured worksheet cannot be selected
      */
     @Override
     public void open() throws TabularDataException
@@ -226,7 +223,7 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Clears cached row data held by the current worksheet handler.
+     * Clears data held by the current worksheet handler.
      *
      * <p>
      * Worksheet streams and workbook packages are closed by the worksheet-reading methods that open
@@ -262,8 +259,8 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Finds the first column in the specified row whose cell value equals the specified text,
-     * ignoring case and leading or trailing whitespace.
+     * Finds the first column in the specified row whose cell value equals the given text, ignoring
+     * case and leading or trailing whitespace.
      *
      * <p>
      * A {@code null} search value is treated as an empty string. Null cell values are skipped,
@@ -278,23 +275,21 @@ public class EventExcelReader implements ExcelReadable
      *         found or the row index is invalid
      */
     @Override
-    public int findColumnIndexByContent(String entry, int rowIndex)
+    public int findColumnIndexByContent(String entry, final int rowIndex)
     {
-        // Streaming lookup for column index at a given row
-        final int targetRow = rowIndex;
-        final String searchEntry = entry != null ? entry.trim() : "";
         final int[] foundCol = {-1};
+        final String searchEntry = (entry != null ? entry.trim() : "");
 
         try
         {
-            Consumer<String[]> finderConsumer = new Consumer<String[]>()
+            Consumer<String[]> finder = new Consumer<String[]>()
             {
                 private int currentRow = 0;
 
                 @Override
                 public void accept(String[] row)
                 {
-                    if (currentRow == targetRow)
+                    if (currentRow == rowIndex)
                     {
                         for (int j = 0; j < row.length; j++)
                         {
@@ -312,17 +307,17 @@ public class EventExcelReader implements ExcelReadable
 
             if (tabParam instanceof String)
             {
-                readWorksheet((String) tabParam, finderConsumer);
+                readWorksheet((String) tabParam, finder);
             }
 
             else if (tabParam instanceof Integer)
             {
-                readWorksheet(((Integer) tabParam).intValue(), finderConsumer);
+                readWorksheet(((Integer) tabParam).intValue(), finder);
             }
 
             else
             {
-                readWorksheet(0, finderConsumer);
+                readWorksheet(0, finder);
             }
         }
 
@@ -351,7 +346,7 @@ public class EventExcelReader implements ExcelReadable
      *         found, {@code regex} is {@code null}, or {@code rowIndex} is invalid
      */
     @Override
-    public int findColumnIndexRegex(String regex, int rowIndex)
+    public int findColumnIndexRegex(String regex, final int rowIndex)
     {
         if (regex == null || rowIndex < 0)
         {
@@ -370,20 +365,19 @@ public class EventExcelReader implements ExcelReadable
             pattern = Pattern.compile(Pattern.quote(regex), Pattern.CASE_INSENSITIVE);
         }
 
-        final int targetRow = rowIndex;
-        final Pattern targetPattern = pattern;
         final int[] foundCol = {-1};
+        final Pattern targetPattern = pattern;
 
         try
         {
-            Consumer<String[]> finderConsumer = new Consumer<String[]>()
+            Consumer<String[]> finder = new Consumer<String[]>()
             {
                 private int currentRow = 0;
 
                 @Override
                 public void accept(String[] row)
                 {
-                    if (currentRow == targetRow)
+                    if (currentRow == rowIndex)
                     {
                         for (int j = 0; j < row.length; j++)
                         {
@@ -403,17 +397,17 @@ public class EventExcelReader implements ExcelReadable
 
             if (tabParam instanceof String)
             {
-                readWorksheet((String) tabParam, finderConsumer);
+                readWorksheet((String) tabParam, finder);
             }
 
             else if (tabParam instanceof Integer)
             {
-                readWorksheet(((Integer) tabParam).intValue(), finderConsumer);
+                readWorksheet(((Integer) tabParam).intValue(), finder);
             }
 
             else
             {
-                readWorksheet(0, finderConsumer);
+                readWorksheet(0, finder);
             }
         }
 
@@ -467,7 +461,18 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Required by ExcelReadable interface (defaults to a no-op consumer if none provided).
+     * Reads the specified worksheet.
+     *
+     * <p>
+     * Worksheet names are matched without regard to case. If the worksheet is not specified, the
+     * first worksheet is assumed.
+     * </p>
+     *
+     * @param tabName
+     *        name of the worksheet to load
+     *
+     * @throws TabularDataException
+     *         if the specified worksheet is unknown or an XML-parsing error occurs
      */
     @Override
     public void readWorksheet(String tabName) throws TabularDataException
@@ -477,13 +482,19 @@ public class EventExcelReader implements ExcelReadable
             @Override
             public void accept(String[] row)
             {
-                // No-op
+                // Just dummy
             }
         });
     }
 
     /**
-     * Required by ExcelReadable interface (defaults to a no-op consumer if none provided).
+     * Reads the specified worksheet, using the index order number.
+     *
+     * @param tabIndex
+     *        zero-based index of the worksheet to read
+     *
+     * @throws TabularDataException
+     *         if the specified worksheet is unknown or an XML-parsing error occurs
      */
     @Override
     public void readWorksheet(int tabIndex) throws TabularDataException
@@ -493,7 +504,7 @@ public class EventExcelReader implements ExcelReadable
             @Override
             public void accept(String[] row)
             {
-                // No-op
+                // Just dummy
             }
         });
     }
@@ -516,19 +527,17 @@ public class EventExcelReader implements ExcelReadable
      * Reads the specified worksheet and passes its rows to the specified consumer.
      *
      * <p>
-     * Worksheet names are matched without regard to case. If {@code tabName} is {@code null} or
-     * empty, the first worksheet is selected.
+     * Worksheet names are matched without regard to case. If the worksheet is not specified, the
+     * first worksheet is assumed.
      * </p>
      *
      * @param tabName
-     *        name of the worksheet to read, or {@code null} or an empty string to select the first
-     *        worksheet
+     *        name of the worksheet to read
      * @param rowConsumer
      *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
-     *         if the specified worksheet does not exist, or an I/O, workbook-processing, or
-     *         XML-parsing error occurs
+     *         if the specified worksheet is unknown or an XML-parsing error occurs
      */
     public void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
     {
@@ -586,8 +595,7 @@ public class EventExcelReader implements ExcelReadable
      *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
-     *         if the worksheet index is invalid, or an I/O, workbook-processing, or XML-parsing
-     *         error occurs
+     *         if the worksheet index is invalid, or an XML-parsing error occurs
      */
     public void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
     {
@@ -595,7 +603,7 @@ public class EventExcelReader implements ExcelReadable
         {
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet is unknown. Call open() in [" + filePath + "] first.");
         }
-        
+
         else if (tabIndex >= 0)
         {
             try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
@@ -747,7 +755,7 @@ public class EventExcelReader implements ExcelReadable
         Path file = Paths.get("src/io/test", "Praveen_batch_list.xlsx");
 
         // Instantiate without a default sheet to test late binding / exception safety
-        try (EventExcelReader reader = new EventExcelReader(file, true))
+        try (EventExcelReader reader = new EventExcelReader(file, true, "qantas.com1"))
         {
             // It selects the first worksheet by default unless specified
             reader.open();
@@ -755,7 +763,7 @@ public class EventExcelReader implements ExcelReadable
             System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
 
             // Stream rows from a specifically named worksheet
-            reader.readWorksheet("qantas.com", new Consumer<String[]>()
+            reader.readWorksheet(new Consumer<String[]>()
             {
                 @Override
                 public void accept(String[] row)
