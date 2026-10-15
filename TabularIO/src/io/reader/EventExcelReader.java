@@ -172,16 +172,19 @@ public class EventExcelReader implements ExcelReadable
     }
 
     /**
-     * Selects the worksheet to be read by subsequent operations.
+     * Reads the specified worksheet and passes each row to the provided consumer.
      *
-     * <p>
-     * If a worksheet name or zero-based index was provided to the constructor, that worksheet is
-     * selected. Otherwise, the first worksheet is selected by default. Worksheet data is parsed
-     * when a reading method is invoked.
-     * </p>
-     *
+     * @param tabName
+     *        the name of the worksheet to read
+     * @param rowConsumer
+     *        the consumer that processes each row
+     * 
      * @throws TabularDataException
-     *         if the configured worksheet cannot be selected
+     *         if {@link #open()} has not been called, the worksheet cannot be
+     *         found, or an error occurs while reading the worksheet
+     * @throws NullPointerException
+     *         if {@code rowConsumer} is {@code null}, if not otherwise handled by the
+     *         implementation
      */
     @Override
     public void open() throws TabularDataException
@@ -500,7 +503,7 @@ public class EventExcelReader implements ExcelReadable
      *
      * @param rowConsumer
      *        consumer to process each parsed row
-     * 
+     *
      * @throws TabularDataException
      *         if an error occurs during parsing
      */
@@ -529,7 +532,12 @@ public class EventExcelReader implements ExcelReadable
      */
     public void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
     {
-        if (tabName != null && !Utils.isEmpty(tabName))
+        if (currentSheet == null)
+        {
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet is unknown. Call open() in [" + filePath + "] first.");
+        }
+
+        else if (tabName != null && !Utils.isEmpty(tabName))
         {
             boolean found = false;
 
@@ -566,11 +574,6 @@ public class EventExcelReader implements ExcelReadable
                 throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "Error streaming sheet [" + tabName + "] in [" + filePath + "]", exc);
             }
         }
-
-        else
-        {
-            readWorksheet(0, rowConsumer);
-        }
     }
 
     /**
@@ -588,7 +591,12 @@ public class EventExcelReader implements ExcelReadable
      */
     public void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
     {
-        if (tabIndex >= 0)
+        if (currentSheet == null)
+        {
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet is unknown. Call open() in [" + filePath + "] first.");
+        }
+        
+        else if (tabIndex >= 0)
         {
             try (OPCPackage pkg = OPCPackage.open(filePath.toFile(), PackageAccess.READ))
             {
@@ -633,7 +641,7 @@ public class EventExcelReader implements ExcelReadable
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Invalid worksheet index [" + tabIndex + "] in [" + filePath + "]");
         }
     }
-    
+
     /**
      * Fetches a list of current available worksheet names defined in the workbook.
      *
@@ -741,7 +749,10 @@ public class EventExcelReader implements ExcelReadable
         // Instantiate without a default sheet to test late binding / exception safety
         try (EventExcelReader reader = new EventExcelReader(file, true))
         {
+            // It selects the first worksheet by default unless specified
             reader.open();
+
+            System.out.printf("Active Sheet: %s%n", reader.getWorksheetName());
 
             // Stream rows from a specifically named worksheet
             reader.readWorksheet("qantas.com", new Consumer<String[]>()
