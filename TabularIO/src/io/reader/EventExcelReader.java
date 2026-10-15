@@ -93,7 +93,7 @@ public class EventExcelReader implements ExcelReadable
     private ExcelHandler handler;
     private String currentSheet;
 
-    public abstract static class RowMapConsumer implements Consumer<String[]>
+    public abstract static class NamedRowConsumer implements Consumer<String[]>
     {
         private final boolean hasHeaders;
         private final Set<String> selectedColumns;
@@ -131,7 +131,7 @@ public class EventExcelReader implements ExcelReadable
         /**
          * Creates a header-mapped consumer, assuming the first row contains headers.
          */
-        public RowMapConsumer()
+        public NamedRowConsumer()
         {
             this(true, (String[]) null);
         }
@@ -142,7 +142,7 @@ public class EventExcelReader implements ExcelReadable
          * @param hasHeaders
          *        whether the first row contains headers
          */
-        public RowMapConsumer(boolean hasHeaders)
+        public NamedRowConsumer(boolean hasHeaders)
         {
             this(hasHeaders, (String[]) null);
         }
@@ -154,7 +154,7 @@ public class EventExcelReader implements ExcelReadable
          * @param columns
          *        column header names to include in each row map
          */
-        public RowMapConsumer(String...columns)
+        public NamedRowConsumer(String...columns)
         {
             this(true, columns);
         }
@@ -167,7 +167,7 @@ public class EventExcelReader implements ExcelReadable
          * @param columns
          *        column names to include in each row map
          */
-        public RowMapConsumer(boolean hasHeaders, String...columns)
+        public NamedRowConsumer(boolean hasHeaders, String...columns)
         {
             this.hasHeaders = hasHeaders;
             this.rowIndex = 0;
@@ -639,15 +639,15 @@ public class EventExcelReader implements ExcelReadable
     /**
      * Reads the currently configured worksheet, streaming each row to the provided consumer.
      *
-     * @param rowConsumer
+     * @param NamedRowConsumer
      *        consumer to process each parsed row
      *
      * @throws TabularDataException
      *         if an error occurs during parsing
      */
-    public void readWorksheet(Consumer<String[]> rowConsumer) throws TabularDataException
+    public void readWorksheet(Consumer<String[]> NamedRowConsumer) throws TabularDataException
     {
-        readWorksheet(currentSheet, rowConsumer);
+        readWorksheet(currentSheet, NamedRowConsumer);
     }
 
     /**
@@ -660,13 +660,13 @@ public class EventExcelReader implements ExcelReadable
      *
      * @param tabName
      *        name of the worksheet to read
-     * @param rowConsumer
+     * @param NamedRowConsumer
      *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
      *         if the specified worksheet is unknown or an XML-parsing error occurs
      */
-    public void readWorksheet(String tabName, Consumer<String[]> rowConsumer) throws TabularDataException
+    public void readWorksheet(String tabName, Consumer<String[]> NamedRowConsumer) throws TabularDataException
     {
         if (currentSheet == null)
         {
@@ -683,7 +683,7 @@ public class EventExcelReader implements ExcelReadable
                 XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
                 ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), rowConsumer) : new ExcelHandler(sst, rowConsumer));
+                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), NamedRowConsumer) : new ExcelHandler(sst, NamedRowConsumer));
 
                 while (iter.hasNext())
                 {
@@ -718,13 +718,13 @@ public class EventExcelReader implements ExcelReadable
      *
      * @param tabIndex
      *        zero-based index of the worksheet to read
-     * @param rowConsumer
+     * @param NamedRowConsumer
      *        consumer that processes each row, represented as an array of strings
      *
      * @throws TabularDataException
      *         if the worksheet index is invalid, or an XML-parsing error occurs
      */
-    public void readWorksheet(int tabIndex, Consumer<String[]> rowConsumer) throws TabularDataException
+    public void readWorksheet(int tabIndex, Consumer<String[]> NamedRowConsumer) throws TabularDataException
     {
         if (currentSheet == null)
         {
@@ -741,7 +741,7 @@ public class EventExcelReader implements ExcelReadable
                 XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
                 ReadOnlySharedStringsTable sst = new ReadOnlySharedStringsTable(pkg);
 
-                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), rowConsumer) : new ExcelHandler(sst, rowConsumer));
+                handler = (useStyleTable ? new ExcelHandler(sst, xssfReader.getStylesTable(), NamedRowConsumer) : new ExcelHandler(sst, NamedRowConsumer));
 
                 while (iter.hasNext())
                 {
@@ -911,7 +911,7 @@ public class EventExcelReader implements ExcelReadable
                 }
             });
 
-            reader.readWorksheet("CDW", new RowMapConsumer("Owner name", "group")
+            reader.readWorksheet("CDW", new NamedRowConsumer("Owner name", "group")
             {
                 @Override
                 public void acceptRow(Map<String, String> rowMap, int rowIndex)

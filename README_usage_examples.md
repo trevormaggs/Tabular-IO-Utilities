@@ -200,9 +200,9 @@ catch (TabularDataException exc)
 </details>
 
 <details>
-<summary><strong>4. Reading Excel Rows as Maps (<code>RowConsumer</code>)</strong></summary>
+<summary><strong>4. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
 
-When processing worksheets with known column headers, `RowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
+When processing worksheets with known column headers, `NamedRowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
 
 The following example reads the `Owner name` and `group` columns from the `Sheet3` worksheet and processes each row using its header names.
 
@@ -213,7 +213,7 @@ try (EventExcelReader reader = new EventExcelReader(excelFile, true))
 {
     reader.open();
 
-    reader.readWorksheet("Sheet3", new RowConsumer("Owner name", "group")
+    reader.readWorksheet("Sheet3", new NamedRowConsumer("Owner name", "group")
     {
         @Override
         public void acceptRow(Map<String, String> rowMap, int rowIndex)
@@ -235,7 +235,7 @@ In this example:
 
 - **Column selection:** Only `Owner name` and `group` are included in each row map.
 - **Header-based access:** Values are retrieved using `rowMap.get("Owner name")` and `rowMap.get("group")`.
-- **Row indexes:** `rowIndex` identifies the data row according to `RowMapConsumer`'s indexing convention. When a header row is present, the first data row has index `0`.
+- **Row indexes:** `rowIndex` identifies the data row according to `NamedRowConsumer`'s indexing convention. When a header row is present, the first data row has index `0`.
 - **Worksheet context:** `reader.getWorksheetName()` returns the currently selected worksheet name.
 
 This approach is useful when column positions may change but the header names remain consistent.
