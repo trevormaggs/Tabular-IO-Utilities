@@ -17,14 +17,15 @@ import org.xml.sax.helpers.DefaultHandler;
  *
  * <p>
  * Cell values are converted to strings and accumulated into row arrays. Shared strings are resolved
- * through the supplied shared-strings table. Numeric values are formatted using worksheet styles
+ * through the provided shared-strings table. Numeric values are formatted using worksheet styles
  * when a styles table is available.
  * </p>
  *
  * <p>
  * Formula cells use their cached results stored in the workbook. This handler does not evaluate
- * formulas. Although XML parsing is event-driven, parsed rows are retained in memory in
- * {@link #rowCache}.
+ * formulas. Each completed row is passed to the provided row consumer and is not retained by this
+ * handler, allowing worksheet data to be processed incrementally without loading the entire
+ * worksheet into memory.
  * </p>
  */
 class ExcelHandler extends DefaultHandler

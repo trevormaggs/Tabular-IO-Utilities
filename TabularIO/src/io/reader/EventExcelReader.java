@@ -42,7 +42,6 @@ import org.xml.sax.XMLReader;
 import io.ExcelReadable;
 import io.TabularDataException;
 import io.TabularDataException.ErrorCode;
-import jdk.xml.internal.Utils;
 
 /**
  * Reads Excel XLSX workbooks using Apache POI’s event-based API to reduce memory consumption when
@@ -198,9 +197,10 @@ public class EventExcelReader implements ExcelReadable
                 }
             }
 
+            // Regular contents start at row 0 if no headers exist
             int actualRowIndex = (hasHeaders ? rowIndex - 1 : rowIndex);
 
-            acceptMappedRow(rowMap, actualRowIndex);
+            acceptRow(rowMap, actualRowIndex);
             rowIndex++;
         }
 
@@ -213,7 +213,7 @@ public class EventExcelReader implements ExcelReadable
          * @param rowIndex
          *        zero-based data row index
          */
-        public abstract void acceptMappedRow(Map<String, String> rowMap, int rowIndex);
+        public abstract void acceptRow(Map<String, String> rowMap, int rowIndex);
     }
 
     /**
@@ -673,7 +673,7 @@ public class EventExcelReader implements ExcelReadable
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Worksheet is unknown. Call open() in [" + filePath + "] first.");
         }
 
-        else if (tabName != null && !Utils.isEmpty(tabName))
+        else if (tabName != null && !tabName.trim().isEmpty())
         {
             boolean found = false;
 
@@ -873,7 +873,7 @@ public class EventExcelReader implements ExcelReadable
 
         catch (ParserConfigurationException exc)
         {
-            throw new IllegalStateException("SAX parser configuration error: " + exc.getMessage(), exc);
+            throw new IllegalStateException("SAX parser configuration error [ " + exc.getMessage() + "]", exc);
         }
     }
 
@@ -914,7 +914,7 @@ public class EventExcelReader implements ExcelReadable
             reader.readWorksheet("CDW", new RowMapConsumer("Owner name", "group")
             {
                 @Override
-                public void acceptMappedRow(Map<String, String> rowMap, int rowIndex)
+                public void acceptRow(Map<String, String> rowMap, int rowIndex)
                 {
                     String owner = rowMap.get("Owner name");
                     String group = rowMap.get("group");

@@ -201,7 +201,50 @@ catch (TabularDataException exc)
 </details>
 
 <details>
-<summary><strong>4. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
+<summary><strong>4. Reading Excel Rows as Maps (<code>RowMapConsumer</code>)</strong></summary>
+
+When processing worksheets with known column headers, `RowMapConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
+
+The following example reads the `Owner name` and `group` columns from the `CDW` worksheet and processes each row using its header names.
+
+```java
+Path excelFile = Paths.get("data", "workbook.xlsx");
+
+try (EventExcelReader reader = new EventExcelReader(excelFile, true))
+{
+    reader.open();
+
+    reader.readWorksheet("CDW", new RowMapConsumer("Owner name", "group")
+    {
+        @Override
+        public void acceptRow(Map<String, String> rowMap, int rowIndex)
+        {
+            String owner = rowMap.get("Owner name");
+            String group = rowMap.get("group");
+
+            System.out.printf("Row %d @ %s -> Name: %s -> Group: %s%n",
+                    rowIndex, reader.getWorksheetName(), owner, group);
+        }
+    });
+}
+catch (TabularDataException exc)
+{
+    System.err.printf("Streaming error [%s]: %s%n",
+            exc.getErrorCode(), exc.getMessage());
+}
+```
+
+In this example:
+
+- **Column selection:** Only `Owner name` and `group` are included in each row map.
+- **Header-based access:** Values are retrieved using `rowMap.get("Owner name")` and `rowMap.get("group")`.
+- **Row indexes:** `rowIndex` identifies the data row according to `RowMapConsumer`'s indexing convention. When a header row is present, the first data row has index `0`.
+- **Worksheet context:** `reader.getWorksheetName()` returns the currently selected worksheet name.
+
+This approach is useful when column positions may change but the header names remain consistent.
+</details>
+<details>
+<summary><strong>5. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
 
 Create a workbook, write headers and data rows, and configure an auto-filter.
 
