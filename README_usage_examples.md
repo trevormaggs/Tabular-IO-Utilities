@@ -120,13 +120,13 @@ try (Readable reader = new ReadCSV(csvFile))
 	// Iterate over rows represented as String arrays
 	for (String[] row : reader)
 	{
-		System.out.println(Arrays.toString(row));
+	  System.out.println(Arrays.toString(row));
 	}
 }
 
 catch (TabularDataException exc)
 {
-	System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+  System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
 }
 ```
 </details>
@@ -167,23 +167,24 @@ catch (TabularDataException exc)
 <details>
 <summary><strong>3. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
 
-For large `.xlsx` files, `EventExcelReader` supports low-memory, event-driven SAX parsing with a consumer callback.
+For large `.xlsx` files, `EventExcelReader` supports low-memory, event-driven SAX parsing using a consumer callback pattern.
 
 ```java
 Path largeFile = Paths.get("data", "massive_transaction_log.xlsx");
 
-// Instantiate reader with style support and deferred worksheet selection
+// Create reader with style support and deferred worksheet selection
 try (EventExcelReader reader = new EventExcelReader(largeFile, true))
 {
     reader.open();
 
-    // Stream rows incrementally using an anonymous inner-class consumer
+    // Stream rows incrementally from the "Transactions" worksheet using an anonymous inner-class consumer
     reader.readWorksheet("Transactions", new Consumer<String[]>()
     {
         @Override
         public void accept(String[] row)
         {
-            // Process each row as it is delivered
+            // Do whatever you want to do with each row as it is delivered here
+
             if (row.length > 2 && "FAILED".equalsIgnoreCase(row[2]))
             {
                 System.out.println("Alert - Failed Transaction: " + Arrays.toString(row));
