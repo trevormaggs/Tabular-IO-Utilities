@@ -70,7 +70,7 @@ public class ReadCSV implements Readable
 
         if (!Files.isRegularFile(csvFile))
         {
-            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + csvFile + "] does not exist or is not a regular file.");
+            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + csvFile + "] is not a regular file or does not exist.");
         }
 
         String fname = csvFile.toString().toLowerCase();
@@ -517,21 +517,6 @@ public class ReadCSV implements Readable
 
                     dataset.set(i, replaceRow);
                 }
-            }
-        }
-    }
-
-    public static void main(String[] args) throws TabularDataException
-    {
-        try (ReadCSV tester = new ReadCSV("DESKTOP-E0REK70_metadata.csv"))
-        {
-            tester.open();
-
-            System.out.printf("Rows: %d, Columns: %d%n", tester.getRowCount(), tester.getColumnCount());
-
-            for (String[] line : tester)
-            {
-                System.out.printf("%s\n", Arrays.toString(line));
             }
         }
     }

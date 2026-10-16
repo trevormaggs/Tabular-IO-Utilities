@@ -1,12 +1,16 @@
 package io.test;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
+import io.reader.ReadCSV;
 import io.reader.ReadWorkbook;
 import io.style.AlternatingRowFactory;
 import io.writer.WriteWorkbook;
 import io.ExcelWritable;
+import io.Readable;
+import io.TabularDataException;
 
 public class TestWorkbook
 {
@@ -77,7 +81,8 @@ public class TestWorkbook
             }
 
             book.setAutoFilter(0, 0, content.length - 1, header.length - 1);
-            //book.alternateRowStyles(0, 0, content.length - 1, header.length - 1, ColourStyle.ORANGE);
+            // book.alternateRowStyles(0, 0, content.length - 1, header.length - 1,
+            // ColourStyle.ORANGE);
 
             AlternatingRowFactory factory = book.getInstanceAlternatingRow();
             factory.setHeaderRowRGB(192, 80, 77).setEvenRowRGB(204, 255, 204).setOddRowRGB(128, 100, 162).setBorderRGB(128, 128, 128).apply(0, 0, content.length - 1, header.length - 1);
@@ -91,9 +96,33 @@ public class TestWorkbook
         }
     }
 
+    public static void testReadCSV()
+    {
+        Path csvFile = Paths.get("src/io/test/DESKTOP-E0REK70_metadata.csv");
+
+        try (Readable reader = new ReadCSV(csvFile))
+        {
+            reader.open();
+
+            System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+
+            // Iterate over rows represented as String arrays
+            for (String[] row : reader)
+            {
+                System.out.println(Arrays.toString(row));
+            }
+        }
+
+        catch (TabularDataException exc)
+        {
+            System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+        }
+    }
+
     public static void main(String[] args)
     {
-        testReadWorkbook();
-        //testAlternatingRowFactory();
+        // testReadWorkbook();
+        // testAlternatingRowFactory();
+        testReadCSV();
     }
 }

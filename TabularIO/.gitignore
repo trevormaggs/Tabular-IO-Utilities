@@ -4,3 +4,4 @@ src/io/test/xl
 *.xls
 *.xlsx
 *.pdf
+*.csv

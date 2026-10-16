@@ -109,25 +109,26 @@ Each example is collapsible. Expand a section to view its code.
 For lightweight, text-based tabular processing without external dependencies, use the CSV reader implementation.
 
 ```java
-Path csvFile = Paths.get("data", "employees.csv");
+Path csvFile = Paths.get("employees.csv");
 
-try (Readable reader = new CsvReader(csvFile))
+try (Readable reader = new ReadCSV(csvFile))
 {
-    reader.open();
-    System.out.printf("Total Rows: %d%n", reader.getRowCount());
+	reader.open();
 
-    // Iterate over rows represented as String arrays
-    for (String[] row : reader)
-    {
-        System.out.println(Arrays.toString(row));
-    }
+	System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+	
+	// Iterate over rows represented as String arrays
+	for (String[] row : reader)
+	{
+		System.out.println(Arrays.toString(row));
+	}
 }
+
 catch (TabularDataException exc)
 {
-    System.err.printf("CSV read error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+	System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
 }
 ```
-
 </details>
 
 <details>
@@ -142,8 +143,7 @@ try (ExcelReadable reader = new ReadWorkbook(excelFile, true, "Summary"))
 {
     reader.open();
     System.out.printf("Active Worksheet: %s%n", reader.getWorksheetName());
-    System.out.printf("Dimensions - Rows: %d, Columns: %d%n",
-            reader.getRowCount(), reader.getColumnCount());
+    System.out.printf("Dimensions - Rows: %d, Columns: %d%n", reader.getRowCount(), reader.getColumnCount());
 
     // Locate a specific column index by header title
     int headerRow = 0;
