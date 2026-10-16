@@ -169,8 +169,8 @@ public class EventExcelReader implements ExcelReadable
          */
         public NamedRowConsumer(boolean hasHeaders, String...columns)
         {
-            this.hasHeaders = hasHeaders;
             this.rowIndex = 0;
+            this.hasHeaders = hasHeaders;
             this.selectedColumns = (columns != null) ? Collections.unmodifiableSet(new HashSet<>(Arrays.asList(columns))) : null;
         }
 
@@ -180,28 +180,39 @@ public class EventExcelReader implements ExcelReadable
             if (hasHeaders && rowIndex == 0)
             {
                 headers = normaliseHeaders(row);
-                rowIndex++;
-
-                return;
             }
 
-            Map<String, String> rowMap = new LinkedHashMap<>();
-
-            for (int i = 0; i < row.length; i++)
+            else
             {
-                String colName = headers != null && i < headers.length && !headers[i].isEmpty() ? headers[i] : "Column" + i;
+                Map<String, String> rowMap = new LinkedHashMap<>();
 
-                if (selectedColumns == null || selectedColumns.contains(colName))
+                for (int i = 0; i < row.length; i++)
                 {
-                    rowMap.put(colName, row[i]);
+                    String colName = headers != null && i < headers.length && !headers[i].isEmpty() ? headers[i] : "Column" + i;
+
+                    if (selectedColumns == null || selectedColumns.contains(colName))
+                    {
+                        rowMap.put(colName, row[i]);
+                    }
                 }
+
+                // Regular contents start at row 0 if no headers exist
+                int actualRowIndex = (hasHeaders ? rowIndex - 1 : rowIndex);
+
+                acceptRow(rowMap, actualRowIndex);
             }
 
-            // Regular contents start at row 0 if no headers exist
-            int actualRowIndex = (hasHeaders ? rowIndex - 1 : rowIndex);
-
-            acceptRow(rowMap, actualRowIndex);
             rowIndex++;
+        }
+
+        public String[] getHeaderArray()
+        {
+            return (headers != null ? headers.clone() : null);
+        }
+
+        public String getHeaderByIndex(int pos)
+        {
+            return (headers == null || pos < 0 || pos >= headers.length ? "" : headers[pos]);
         }
 
         /**

@@ -9,7 +9,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -35,8 +34,8 @@ import io.TabularDataException.ErrorCode;
  *
  * <ul>
  * <li>7 February 2025 - Initial creation as AbstractCSVReader.</li>
- * <li>8 October 2026 - Re-factored to concrete ReadCSV in io.reader, added RFC 4180 multi-line
- * record parsing, and integrated TabularDataException.</li>
+ * <li>8 October 2026 - Re-factored to concrete ReadCSV in io.reader, added RFC 4180-compliant
+ * multi-line record parsing, and integrated TabularDataException.</li>
  * <li>10 October 2026 - Updated matrix column sizing to evaluate maximum row width across the whole
  * document.</li>
  * </ul>
@@ -144,8 +143,8 @@ public class ReadCSV implements Readable
     }
 
     /**
-     * Opens and parses the CSV file contents into memory, tokenising multi-line records andapplying
-     * {@link #processRow(String[], int)} sanitisation to populated rows.
+     * Opens and parses the CSV file contents into memory, tokenising multi-line records and
+     * applying {@link #processRow(String[], int)} sanitisation to populated rows.
      *
      * @throws TabularDataException
      *         if the file cannot be accessed, does not exist, or an I/O error occurs

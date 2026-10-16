@@ -4,6 +4,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Map;
+import io.reader.EventExcelReader;
 import io.reader.ReadCSV;
 import io.reader.ReadWorkbook;
 import io.style.AlternatingRowFactory;
@@ -119,10 +121,40 @@ public class TestWorkbook
         }
     }
 
+    public static void testEventExcelReader()
+    {
+        Path excelFile = Paths.get("src/io/test/Praveen_batch_list.xlsx");
+
+        try (EventExcelReader reader = new EventExcelReader(excelFile, true))
+        {
+            reader.open();
+
+            System.out.printf("Worksheet Name: %s%n", reader.getWorksheetName());   
+
+            reader.readWorksheet("CDW", new EventExcelReader.NamedRowConsumer("Owner name", "group")
+            {
+                @Override
+                public void acceptRow(Map<String, String> rowMap, int rowIndex)
+                {
+                    String owner = rowMap.get("Owner name");
+                    String group = rowMap.get("group");
+
+                    System.out.printf("Row %d -> Name: %s\tGroup: %s%n", rowIndex, owner, group);
+                }
+            });
+        }
+
+        catch (TabularDataException exc)
+        {
+            System.err.printf("Streaming error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+        }
+    }
+
     public static void main(String[] args)
     {
         // testReadWorkbook();
         // testAlternatingRowFactory();
-        testReadCSV();
+        // testReadCSV();
+        testEventExcelReader();
     }
 }

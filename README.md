@@ -76,9 +76,8 @@ This separation allows applications to work with tabular data through common int
 ## Technologies
 
 - **Java** - core programming language.
-- **Apache POI 5.5.1** - reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 - **Eclipse IDE** - development environment.
-- **Java regular expressions** - column-content searching.
+- **Apache POI 5.5.1** - reading and writing Microsoft Excel workbooks in `.xls` and `.xlsx` formats.
 
 ## Java Compatibility
 
@@ -98,9 +97,182 @@ CSV processing uses a text-based approach and does not require Apache POI for ba
 
 ## Usage
 
-The library is intended to be integrated into Java applications through its reading and writing interfaces and their concrete implementations.
+The library can be integrated into Java applications through its reading and writing interfaces and their concrete implementations. The examples below demonstrate common ways to read CSV files, read Excel workbooks, stream large `.xlsx` files, and write formatted workbooks.
 
-Refer to the published Javadoc for API details and available operations. Usage examples and additional integration guidance may be added as the project develops.
+Each example is collapsible. Expand a section to view its code.
+
+### Usage Examples
+
+<details>
+<summary><strong>1. Reading CSV Files</strong></summary>
+
+For lightweight, text-based tabular processing without external dependencies, use the CSV reader implementation.
+
+```java
+Path csvFile = Paths.get("employees.csv");
+
+try (Readable reader = new ReadCSV(csvFile))
+{
+	reader.open();
+
+	System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+	
+	// Iterate over rows represented as String arrays
+	for (String[] row : reader)
+	{
+		System.out.println(Arrays.toString(row));
+	}
+}
+
+catch (TabularDataException exc)
+{
+	System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+</details>
+
+<details>
+<summary><strong>2. Reading Standard Excel Workbooks (<code>ReadWorkbook</code>)</strong></summary>
+
+Use `ReadWorkbook` when you want workbook access, formula evaluation, and formatted strings.
+
+```java
+Path excelFile = Paths.get("data", "financial_report.xlsx");
+
+try (ExcelReadable reader = new ReadWorkbook(excelFile, true, "Summary"))
+{
+    reader.open();
+    System.out.printf("Active Worksheet: %s%n", reader.getWorksheetName());
+    System.out.printf("Dimensions - Rows: %d, Columns: %d%n", reader.getRowCount(), reader.getColumnCount());
+
+    // Locate a specific column index by header title
+    int headerRow = 0;
+    int colIndex = reader.findColumnIndexByContent("Department", headerRow);
+    System.out.printf("Found 'Department' at column index: %d%n", colIndex);
+
+    // Loop over rows using standard iteration
+    for (String[] row : reader)
+    {
+        System.out.println(Arrays.toString(row));
+    }
+}
+catch (TabularDataException exc)
+{
+    System.err.printf("Workbook read error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+</details>
+
+<details>
+<summary><strong>3. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
+
+For large `.xlsx` files, `EventExcelReader` supports low-memory, event-driven SAX parsing using a consumer callback pattern.
+
+```java
+Path largeFile = Paths.get("data", "massive_transaction_log.xlsx");
+
+// Create reader with style support and deferred worksheet selection
+try (EventExcelReader reader = new EventExcelReader(largeFile, true))
+{
+    reader.open();
+
+    // Stream rows incrementally from the "Transactions" worksheet using an anonymous inner-class consumer
+    reader.readWorksheet("Transactions", new Consumer<String[]>()
+    {
+        @Override
+        public void accept(String[] row)
+        {
+            // Do whatever you want to do with each row as it is delivered here
+            if (row.length > 2 && "FAILED".equalsIgnoreCase(row[2]))
+            {
+                System.out.println("Alert - Failed Transaction: " + Arrays.toString(row));
+            }
+        }
+    });
+}
+catch (TabularDataException exc)
+{
+    System.err.printf("Streaming error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+</details>
+
+<details>
+<summary><strong>4. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
+
+When processing worksheets with known column headers, `NamedRowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
+
+The following example reads the `Owner name` and `group` columns from the `Sheet3` worksheet and processes each row using its header names.
+
+```java
+Path excelFile = Paths.get("data", "workbook.xlsx");
+
+try (EventExcelReader reader = new EventExcelReader(excelFile, true))
+{
+    reader.open();
+
+    System.out.printf("Worksheet Name: %s%n", reader.getWorksheetName());
+
+    reader.readWorksheet("Sheet3", new NamedRowConsumer("Owner name", "group")
+    {
+        @Override
+        public void acceptRow(Map<String, String> rowMap, int rowIndex)
+        {
+            String owner = rowMap.get("Owner name");
+            String group = rowMap.get("group");
+
+            System.out.printf("Row %d -> Name: %s\tGroup: %s%n", rowIndex, owner, group);
+        }
+    });
+}
+
+catch (TabularDataException exc)
+{
+    System.err.printf("Streaming error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+
+In this example:
+
+- **Column selection:** Only `Owner name` and `group` are included in each row map. If no column names are specified, all columns will be read.
+- **Header-based access:** Values are retrieved using `rowMap.get("Owner name")` and `rowMap.get("group")`.
+- **Row indexes:** `rowIndex` is a zero-based index of data rows. The first data row has index `0`, regardless of whether a header row is present.
+- **Worksheet context:** `reader.getWorksheetName()` returns the currently selected worksheet name.
+
+This approach is useful when column positions may change but the header names remain consistent.
+</details>
+<details>
+<summary><strong>5. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
+
+Create a workbook, write headers and data rows, and configure an auto-filter.
+
+```java
+Path outputFile = Paths.get("output", "generated_report.xlsx");
+
+try (ExcelWritable writer = new ExcelWorkbookWriter(outputFile))
+{
+    writer.open();
+
+    // Create a worksheet and write headers
+    writer.createWorksheet("Report Data");
+    writer.writeRow(new String[] { "ID", "Name", "Status", "Amount" });
+
+    // Write content rows
+    writer.writeRow(new String[] { "101", "Acme Corp", "Active", "1500.00" });
+    writer.writeRow(new String[] { "102", "Beta LLC", "Pending", "450.50" });
+
+    // Configure auto-filters across headers
+    writer.setAutoFilter(0, 0, 1, 3);
+}
+catch (TabularDataException exc)
+{
+    System.err.printf("Workbook write error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+
+</details>
+
+For API details and additional operations, refer to the [published Javadoc](https://trevormaggs.github.io/Tabular_IO_Utilities/).
 
 ## Project Status
 
