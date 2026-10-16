@@ -81,8 +81,8 @@ This separation allows applications to work with tabular data through common int
 
 ## Java Compatibility
 
-- **Minimum Java version:** Java 8 (JDK 8).
-- The codebase avoids lambda expressions, favouring traditional Java syntax for compatibility and readability.
+- Minimum Java version: Core Java 8 (JDK 8).
+- The codebase favours traditional Java syntax, including anonymous inner classes instead of lambda expressions, for readability and consistency.
 
 ## Dependencies
 
@@ -130,9 +130,48 @@ catch (TabularDataException exc)
 }
 ```
 </details>
-
 <details>
-<summary><strong>2. Reading Standard Excel Workbooks (<code>ReadWorkbook</code>)</strong></summary>
+<summary><strong>2. Reading Standard Excel Workbooks via an Iterator (<code>ReadWorkbook</code>)</strong></summary>
+
+Use `ReadWorkbook` when you want to iterate every row within the chosen workbook, including formula evaluation, and formatted strings.
+
+```java
+ReadWorkbook book = new ReadWorkbook(Paths.get("data", "financial_report.xlsx"), "Summary");
+
+try
+{
+    book.open();
+
+    Iterator<String[]> it = book.iterator();
+    
+    System.out.printf("%s%n", book.getFilePath());
+    System.out.printf("%s%n", book.getWorksheetName());  
+
+    while (it.hasNext())
+    {
+        System.out.println(Arrays.toString(it.next()));
+    }
+}
+
+catch (Exception exc)
+{
+  System.err.println(exc.getMessage());
+}
+
+finally
+{
+    book.close();
+}
+```
+
+In this example:
+
+- **Resource management:** The workbook is opened using `open()` and closed explicitly using `close()`. When not using a try-with-resources statement, ensure that `close()` is called even if an exception occurs during processing.
+- **Worksheet context:** `book.getWorksheetName()` returns the currently selected worksheet name.
+
+</details>        
+<details>
+<summary><strong>3. Reading Standard Excel Workbooks (<code>ReadWorkbook</code>)</strong></summary>
 
 Use `ReadWorkbook` when you want workbook access, formula evaluation, and formatted strings.
 
@@ -162,9 +201,8 @@ catch (TabularDataException exc)
 }
 ```
 </details>
-
 <details>
-<summary><strong>3. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
+<summary><strong>4. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
 
 For large `.xlsx` files, `EventExcelReader` supports low-memory, event-driven SAX parsing using a consumer callback pattern.
 
@@ -196,9 +234,8 @@ catch (TabularDataException exc)
 }
 ```
 </details>
-
 <details>
-<summary><strong>4. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
+<summary><strong>5. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
 
 When processing worksheets with known column headers, `NamedRowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
 
@@ -242,7 +279,7 @@ In this example:
 This approach is useful when column positions may change but the header names remain consistent.
 </details>
 <details>
-<summary><strong>5. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
+<summary><strong>6. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
 
 Create a workbook, write headers and data rows, and configure an auto-filter.
 
@@ -269,7 +306,6 @@ catch (TabularDataException exc)
     System.err.printf("Workbook write error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
 }
 ```
-
 </details>
 
 For API details and additional operations, refer to the [published Javadoc](https://trevormaggs.github.io/Tabular_IO_Utilities/).

@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import io.reader.EventExcelReader;
 import io.reader.ReadCSV;
@@ -18,13 +19,10 @@ public class TestWorkbook
 {
     public static void testReadWorkbook()
     {
-        try
+        try (ReadWorkbook book = new ReadWorkbook(Paths.get("src/io/test/TurramurraHomeConstruction.xlsx")))
         {
-            ReadWorkbook book = new ReadWorkbook(Paths.get("src\\io\\test\\TurramurraHomeConstruction.xlsx"), "Projected costs");
             book.open();
-            // book.setWorksheet("tab2");
-
-            Iterator<String[]> it = book.iterator();
+            book.readWorksheet("Projected costs");
 
             System.out.printf("%s%n", book.getFilePath());
             System.out.printf("%s%n", book.getWorksheetName());
@@ -32,6 +30,34 @@ public class TestWorkbook
             System.out.printf("%s%n", book.findColumnIndexByContent("Amount"));
             System.out.printf("%s%n", book.findColumnIndexByContent("Category"));
             System.out.printf("%s%n", book.findColumnIndexByContent("Owner name"));
+
+            List<String> list = book.getColumnValues("Amount");
+
+            for (String str : list)
+            {
+                System.out.printf("%s%n", str);
+            }
+
+            book.close();
+        }
+
+        catch (Exception exc)
+        {
+            System.err.println(exc.getMessage());
+        }
+    }
+
+    public static void testReadWorkbookIterator()
+    {
+        try
+        {
+            ReadWorkbook book = new ReadWorkbook(Paths.get("src/io/test/TurramurraHomeConstruction.xlsx"), "Projected costs");
+            book.open();
+
+            Iterator<String[]> it = book.iterator();
+
+            System.out.printf("%s%n", book.getFilePath());
+            System.out.printf("%s%n", book.getWorksheetName());
 
             while (it.hasNext())
             {
@@ -129,7 +155,7 @@ public class TestWorkbook
         {
             reader.open();
 
-            System.out.printf("Worksheet Name: %s%n", reader.getWorksheetName());   
+            System.out.printf("Worksheet Name: %s%n", reader.getWorksheetName());
 
             reader.readWorksheet("CDW", new EventExcelReader.NamedRowConsumer("Owner name", "group")
             {
@@ -152,9 +178,10 @@ public class TestWorkbook
 
     public static void main(String[] args)
     {
-        // testReadWorkbook();
+        //testReadWorkbook();
+        testReadWorkbookIterator();
         // testAlternatingRowFactory();
         // testReadCSV();
-        testEventExcelReader();
+        // testEventExcelReader();
     }
 }

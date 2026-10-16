@@ -6,9 +6,12 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -55,7 +58,6 @@ public class ReadWorkbook implements ExcelReadable
     private SheetDimension matrixsize;
     protected Workbook workbook;
     protected Sheet sheet;
-
     private final DataFormatter dataFormatter = new DataFormatter();
 
     /**
@@ -134,7 +136,7 @@ public class ReadWorkbook implements ExcelReadable
      *        path to the workbook file in string form
      * @param tabParam
      *        zero-based worksheet index or worksheet name
-     * 
+     *
      * @throws InvalidPathException
      *         if the specified path string is invalid
      * @throws TabularDataException
@@ -171,6 +173,7 @@ public class ReadWorkbook implements ExcelReadable
         {
             workbook = WorkbookFactory.create(filePath.toFile());
             sheetCount = workbook.getNumberOfSheets();
+            // formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
             selectSheet();
         }
 
@@ -431,6 +434,76 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
+     * Returns all cell values for the specified column index across the active worksheet.
+     *
+     * @param columnIndex
+     *        zero-based column index
+     * @return list of cell values as strings for the specified column
+     */
+    public List<String> getColumnValues(int columnIndex)
+    {
+        List<String> values = new ArrayList<>();
+
+        if (sheet != null && columnIndex >= 0 && columnIndex < getColumnCount())
+        {
+            int rowCount = getRowCount();
+            for (int i = 0; i < rowCount; i++)
+            {
+                Row row = sheet.getRow(i);
+
+                if (row != null)
+                {
+                    Cell cell = row.getCell(columnIndex, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+                    String str = formatCellToString(cell);
+
+                    if (!str.isEmpty())
+                    {
+                        values.add(str);
+                    }
+                }
+            }
+        }
+
+        return values;
+    }
+
+    /**
+     * Returns all cell values for the column matching the specified header name.
+     *
+     * <p>
+     * Assumes the first row (index 0) contains the column headers.
+     * </p>
+     *
+     * @param headerName
+     *        name of the column header to locate (case-insensitive)
+     * @return list of cell values for that column, or an empty list if not found
+     */
+    public List<String> getColumnValues(String headerName)
+    {
+        headerName = Objects.requireNonNull(headerName, "Header cannot be null").trim();
+
+        if (!headerName.isEmpty() && sheet != null)
+        {
+            int colIndex = findColumnIndexByContent(headerName, 0);
+
+            if (colIndex != -1)
+            {
+                List<String> values = getColumnValues(colIndex);
+
+                if (!values.isEmpty())
+                {
+                    // Removes the header text itself, leaving data values only
+                    values.remove(0);
+                }
+
+                return values;
+            }
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
      * Returns the formatted string value of a cell at the specified row and column coordinates.
      *
      * @param row
@@ -465,7 +538,7 @@ public class ReadWorkbook implements ExcelReadable
 
     /**
      * Selects the initial worksheet and records sheet count.
-     * 
+     *
      * @throws TabularDataException
      *         if the selected worksheet is unknown or undefined
      */
@@ -506,8 +579,8 @@ public class ReadWorkbook implements ExcelReadable
         {
             try
             {
-                FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
-                CellValue value = evaluator.evaluate(cell);
+                FormulaEvaluator formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+                CellValue value = formulaEvaluator.evaluate(cell);
 
                 if (value != null)
                 {
@@ -516,7 +589,7 @@ public class ReadWorkbook implements ExcelReadable
                         case NUMERIC:
                         case STRING:
                         case BOOLEAN:
-                            return dataFormatter.formatCellValue(cell, evaluator).trim();
+                            return dataFormatter.formatCellValue(cell, formulaEvaluator).trim();
 
                         case ERROR:
                             return "ERROR: " + value.getErrorValue();
@@ -526,7 +599,7 @@ public class ReadWorkbook implements ExcelReadable
                     }
                 }
             }
-            
+
             catch (Exception exc)
             {
                 // Fallback to raw formula string if evaluation fails
