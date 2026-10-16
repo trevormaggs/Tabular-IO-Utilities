@@ -16,7 +16,7 @@ Designed for integration into Java applications, this library provides common in
 
 Complete API documentation is available in the published Javadoc:
 
-[**View Javadoc Documentation**](https://trevormaggs.github.io/Tabular_IO_Utilities/)
+[**View Javadoc Documentation**](https://trevormaggs.github.io/Tabular-IO-Utilities/)
 
 ## Features
 
@@ -271,8 +271,6 @@ catch (TabularDataException exc)
 ```
 
 </details>
-
-For API details and additional operations, refer to the [published Javadoc](https://trevormaggs.github.io/Tabular_IO_Utilities/).
 
 ## Project Status
 
