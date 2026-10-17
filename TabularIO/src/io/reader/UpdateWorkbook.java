@@ -1,12 +1,10 @@
 package io.reader;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
@@ -14,33 +12,38 @@ import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import io.TabularDataException;
 import io.TabularDataException.ErrorCode;
 
 /**
  * Uses the Apache POI libraries to read an Excel spreadsheet or similar workbook and update its
  * contents. It supports both Binary XLS and XML-based XLSX formats.
- * 
+ *
+ * <p>
+ * Workbook resources are opened automatically upon construction.
+ * </p>
+ *
  * <p>
  * <b>IMPORTANT:</b> Call {@link #save()} to persist updates back to disk. Once finished, call
  * {@link #close()} (or use inside a {@code try-with-resources} block) to release underlying POI
  * memory buffers and file handles.
  * </p>
- * 
+ *
  * <p>
  * <b>Change log:</b>
  * </p>
- * 
+ *
  * <ul>
  * <li>Trevor Maggs created on 8 November 2021</li>
  * <li>Trevor Maggs modified on 8 October 2026 - Refactored package location to io.reader,
  * modernised exception handling with TabularDataException, fixed font styling state, and decoupled
  * saving from close lifecycle.</li>
+ * <li>Trevor Maggs modified on 17 October 2026 - Aligned with auto-opening constructor pattern and
+ * fixed row-index passing in replaceContent.</li>
  * </ul>
- * 
+ *
  * @author Trevor Maggs
- * @version 0.4
+ * @version 0.5
  * @since 8 November 2021
  */
 public final class UpdateWorkbook extends ReadWorkbook
@@ -50,10 +53,10 @@ public final class UpdateWorkbook extends ReadWorkbook
 
     /**
      * Loads the specified source workbook for in-place updates to the same file.
-     * 
+     *
      * @param file
      *        the Path object representing the workbook file
-     * 
+     *
      * @throws TabularDataException
      *         if the workbook cannot be accessed or an error occurs while initialising the reader
      */
@@ -64,12 +67,12 @@ public final class UpdateWorkbook extends ReadWorkbook
 
     /**
      * Loads the source workbook and writes updates out to a separate destination workbook file.
-     * 
+     *
      * @param file1
      *        the Path object representing the source workbook file
      * @param file2
      *        the Path object representing the destination workbook file
-     * 
+     *
      * @throws TabularDataException
      *         if the workbook cannot be accessed or an error occurs while initialising the reader
      */
@@ -81,7 +84,7 @@ public final class UpdateWorkbook extends ReadWorkbook
 
     /**
      * Loads the source workbook and selects a specific worksheet tab for updating.
-     * 
+     *
      * @param file1
      *        the Path object representing the source workbook file
      * @param file2
@@ -89,7 +92,7 @@ public final class UpdateWorkbook extends ReadWorkbook
      * @param tabParam
      *        either zero-based index in integer form or the tab name in string form to select the
      *        required worksheet
-     * 
+     *
      * @throws TabularDataException
      *         if the workbook cannot be accessed or an error occurs while initialising the reader
      */
@@ -100,46 +103,13 @@ public final class UpdateWorkbook extends ReadWorkbook
     }
 
     /**
-     * Sets a cell font colour for subsequent cell updates.
-     *
-     * <p>
-     * See <a href=
-     * "https://poi.apache.org/apidocs/org/apache/poi/ss/usermodel/IndexedColors.html">poi.apache.org/apidocs/org/apache/poi/ss/usermodel/IndexedColors.html</a>
-     * </p>
-     * 
-     * @param colour
-     *        the {@link IndexedColors} value to use for cell text
-     * 
-     * @throws TabularDataException
-     *         if the workbook resource is not open
-     */
-    public void setFontColour(IndexedColors colour) throws TabularDataException
-    {
-        Workbook wb = workbook;
-
-        if (wb == null)
-        {
-            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Workbook resource is not open. Call open() first.");
-        }
-
-        if (cellStyle == null)
-        {
-            cellStyle = wb.createCellStyle();
-        }
-
-        Font fontStyle = wb.createFont();
-        fontStyle.setColor(colour.getIndex());
-        cellStyle.setFont(fontStyle);
-    }
-
-    /**
-     * Renames the selected worksheet.
+     * Renames the active worksheet.
      *
      * @param replace
      *        the new worksheet name
-     *        
+     *
      * @throws TabularDataException
-     *         if the worksheet is unknown        
+     *         if the worksheet is unknown or undefined
      */
     public void renameWorksheet(String replace) throws TabularDataException
     {
@@ -155,14 +125,14 @@ public final class UpdateWorkbook extends ReadWorkbook
     }
 
     /**
-     * Replaces matching content in the first row of the selected worksheet.
+     * Replaces matching content in the first row (header row) of the selected worksheet.
      *
      * @param text
-     *        the content to find
+     *        the content to match
      * @param replace
      *        the replacement string
      *
-     * @return {@code true} if matching content was found and replaced; otherwise {@code false}
+     * @return {@code true} if matching content was found and replaced, otherwise {@code false}
      *
      * @throws TabularDataException
      *         if no active worksheet is selected
@@ -175,65 +145,63 @@ public final class UpdateWorkbook extends ReadWorkbook
     /**
      * Replaces the content in a cell located in the specified row position with the replacement
      * string provided.
-     * 
+     *
      * @param text
      *        the content to find
      * @param replace
      *        the replacement string
      * @param rowIndex
      *        the zero-based row index in which to search
-     * @return boolean true if the replacement was a success, otherwise false
-     * 
+     * @return {@code true} if matching content was found and replaced; otherwise {@code false}
+     *
      * @throws TabularDataException
      *         if no active worksheet is selected
      */
     public boolean replaceContent(String text, String replace, int rowIndex) throws TabularDataException
     {
-        int col = findColumnIndexByContent(text);
+        int col = findColumnIndexByContent(text, rowIndex);
 
-        if (col > -1)
+        if (col == -1)
         {
-            updateCellValue(rowIndex, col, replace);
-            return true;
+            return false;
         }
 
-        return false;
+        updateCellValue(rowIndex, col, replace);
+        return true;
     }
 
     /**
-     * Updates the content in a cell.
+     * Updates the content in a cell with string text.
      *
-     * @param row
+     * @param rowIndex
      *        the zero-based row index
-     * @param col
+     * @param colIndex
      *        the zero-based column index
      * @param text
-     *        text to replace
-     * 
+     *        text to write into the cell
+     *
      * @throws TabularDataException
      *         if no active worksheet is selected
      */
-    public void updateCellValue(int row, int col, String text) throws TabularDataException
+    public void updateCellValue(int rowIndex, int colIndex, String text) throws TabularDataException
     {
-        Sheet worksheet = sheet;
-
-        if (worksheet == null)
+        if (sheet == null)
         {
-            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Undefined worksheet encountered.");
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Undefined worksheet detected.");
         }
 
-        Row rowLine = worksheet.getRow(row);
+        Row rowLine = sheet.getRow(rowIndex);
 
         if (rowLine == null)
         {
-            rowLine = worksheet.createRow(row);
+            rowLine = sheet.createRow(rowIndex);
         }
 
-        Cell cell = rowLine.getCell(col);
+        Cell cell = rowLine.getCell(colIndex);
 
         if (cell == null)
         {
-            cell = rowLine.createCell(col);
+            cell = rowLine.createCell(colIndex);
         }
 
         cell.setCellValue(text);
@@ -245,21 +213,21 @@ public final class UpdateWorkbook extends ReadWorkbook
     }
 
     /**
-     * Updates the cell numeric content.
+     * Updates the cell with numeric content.
      *
      * @param <T>
      *        expected Number type parameter
-     * @param row
-     *        the row number
-     * @param col
-     *        the column number
+     * @param rowIndex
+     *        the zero-based row index
+     * @param colIndex
+     *        the zero-based column index
      * @param value
      *        the numerical entry to be inserted in the cell
-     * 
+     *
      * @throws TabularDataException
      *         if no active worksheet is selected
      */
-    public <T extends Number> void updateCellValue(int row, int col, T value) throws TabularDataException
+    public <T extends Number> void updateCellValue(int rowIndex, int colIndex, T value) throws TabularDataException
     {
         Sheet worksheet = sheet;
 
@@ -268,18 +236,18 @@ public final class UpdateWorkbook extends ReadWorkbook
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Undefined worksheet encountered.");
         }
 
-        Row rowLine = worksheet.getRow(row);
+        Row rowLine = worksheet.getRow(rowIndex);
 
         if (rowLine == null)
         {
-            rowLine = worksheet.createRow(row);
+            rowLine = worksheet.createRow(rowIndex);
         }
 
-        Cell cell = rowLine.getCell(col);
+        Cell cell = rowLine.getCell(colIndex);
 
         if (cell == null)
         {
-            cell = rowLine.createCell(col);
+            cell = rowLine.createCell(colIndex);
         }
 
         cell.setCellValue(value.doubleValue());
@@ -287,44 +255,6 @@ public final class UpdateWorkbook extends ReadWorkbook
         if (cellStyle != null)
         {
             cell.setCellStyle(cellStyle);
-        }
-    }
-
-    /**
-     * Opens and acquires the resource pointing to the specified workbook.
-     * 
-     * @throws TabularDataException
-     *         if the file does not exist, is password-protected, or an I/O error occurs
-     */
-    @Override
-    public void open() throws TabularDataException
-    {
-        Path fpath = getFilePath();
-
-        if (!Files.isRegularFile(fpath))
-        {
-            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + fpath + "] does not exist or is not a regular file.");
-        }
-
-        try
-        {
-            workbook = WorkbookFactory.create(fpath.toFile());
-            selectSheet();
-        }
-
-        catch (FileNotFoundException exc)
-        {
-            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + fpath + "] does not exist.", exc);
-        }
-
-        catch (EncryptedDocumentException exc)
-        {
-            throw new TabularDataException(ErrorCode.FILE_ACCESS_DENIED, "Unable to read the password-protected workbook [" + fpath + "]. Check the password.", exc);
-        }
-
-        catch (IOException exc)
-        {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "An error occurred while reading data in file [" + fpath + "].", exc);
         }
     }
 
@@ -342,25 +272,24 @@ public final class UpdateWorkbook extends ReadWorkbook
      */
     public void save() throws TabularDataException
     {
-        Workbook wb = workbook;
-
-        if (wb == null)
+        if (workbook == null)
         {
-            throw new TabularDataException(ErrorCode.STREAM_WRITE_FAILED, "Cannot save workbook. Call open() first.");
+            throw new TabularDataException(ErrorCode.STREAM_WRITE_FAILED, "Cannot save workbook. Resource is closed or unavailable.");
         }
 
         Path tempFile = null;
 
         try
         {
-            tempFile = Files.createTempFile("tabular_update_", ".tmp");
+            Path directory = newFile.toAbsolutePath().getParent();
+            tempFile = Files.createTempFile(directory, "tabular_update_", ".tmp");
 
             try (OutputStream fout = Files.newOutputStream(tempFile))
             {
-                wb.write(fout);
+                workbook.write(fout);
             }
 
-            Files.move(tempFile, newFile, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(tempFile, newFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         }
 
         catch (IOException exc)
@@ -374,12 +303,45 @@ public final class UpdateWorkbook extends ReadWorkbook
 
                 catch (IOException exc2)
                 {
-                    // Preserve the cleanup failure without replacing the original exception
                     exc.addSuppressed(exc2);
                 }
             }
 
             throw new TabularDataException(ErrorCode.STREAM_WRITE_FAILED, "Unable to write data to worksheet [" + getWorksheetName() + "] in file [" + newFile + "]", exc);
         }
+    }
+
+    /**
+     * Sets a cell font colour for subsequent cell updates.
+     *
+     * <p>
+     * See <a href=
+     * "https://poi.apache.org/apidocs/org/apache/poi/ss/usermodel/IndexedColors.html">IndexedColors</a>
+     * </p>
+     *
+     * @param colour
+     *        the {@link IndexedColors} value to use for cell text
+     *
+     * @throws TabularDataException
+     *         if the workbook resource is not open or available
+     */
+    @Deprecated
+    public void setFontColour(IndexedColors colour) throws TabularDataException
+    {
+        Workbook wb = workbook;
+
+        if (wb == null)
+        {
+            throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Workbook resource is closed or unavailable.");
+        }
+
+        if (cellStyle == null)
+        {
+            cellStyle = wb.createCellStyle();
+        }
+
+        Font fontStyle = wb.createFont();
+        fontStyle.setColor(colour.getIndex());
+        cellStyle.setFont(fontStyle);
     }
 }

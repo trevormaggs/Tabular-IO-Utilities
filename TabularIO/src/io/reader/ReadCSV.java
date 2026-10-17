@@ -375,7 +375,7 @@ public class ReadCSV implements Readable
     {
         dataset.clear();
         maxColumnSize = 0;
-
+        
         try (BufferedReader br = Files.newBufferedReader(filePath, StandardCharsets.UTF_8))
         {
             lineNumber = 0;

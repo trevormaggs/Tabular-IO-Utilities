@@ -15,7 +15,7 @@ import io.ExcelWritable;
 import io.Readable;
 import io.TabularDataException;
 
-public class TestWorkbook
+public class TestTabularIO
 {
     public static void testReadCSV()
     {
@@ -55,6 +55,11 @@ public class TestWorkbook
 
             for (String str : list)
             {
+                if (str.isEmpty())
+                {
+                    continue;
+                }
+
                 System.out.printf("%s%n", str);
             }
 
@@ -172,10 +177,10 @@ public class TestWorkbook
 
     public static void main(String[] args)
     {
-        //// testReadCSV();
+        // testReadCSV();
         // testReadWorkbook();
         // testReadWorkbookIterator();
-        testEventExcelReader();
-        // testAlternatingRowFactory();
+        // testEventExcelReader();
+        testAlternatingRowFactory();
     }
 }
