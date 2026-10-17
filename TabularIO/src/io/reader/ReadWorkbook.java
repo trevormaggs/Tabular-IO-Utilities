@@ -34,9 +34,8 @@ import io.TabularDataException.ErrorCode;
  *
  * <p>
  * Implements {@link ExcelReadable} to provide worksheet selection, cell access, and row iteration.
- * The reader must be opened using {@link #open()} before accessing worksheet contents and should be
- * closed after use to release underlying resources. A {@code try-with-resources} statement is
- * recommended.
+ * The workbook is opened automatically upon construction and should be closed after use. A
+ * {@code try-with-resources} statement is recommended.
  * </p>
  *
  * <b>Change log:</b>
@@ -44,32 +43,37 @@ import io.TabularDataException.ErrorCode;
  * <li>4 November 2021 - Initial creation.</li>
  * <li>7 October 2026 - Refactored package location to io.reader, implemented ExcelReadable and
  * migrated exception handling to TabularDataException.</li>
+ * <li>17 October 2026 - Optimized formula evaluation by caching FormulaEvaluator at instance level
+ * and refined getColumnValues for row-index stability.</li>
  * </ul>
  *
  * @author Trevor Maggs
- * @version 0.4
+ * @version 0.5
  * @since 4 November 2021
  */
 public class ReadWorkbook implements ExcelReadable
 {
+    private final Object tab;
     private final Path filePath;
-    private Object tab;
+    private final DataFormatter dataFormatter;
     private int sheetCount;
     private SheetDimension matrixsize;
-    protected Workbook workbook;
+    private FormulaEvaluator formulaEvaluator;
     protected Sheet sheet;
-    private final DataFormatter dataFormatter = new DataFormatter();
+    protected Workbook workbook;
 
     /**
-     * Constructs a {@code ReadWorkbook} instance targeting the specified spreadsheet file.
+     * Constructs and opens a {@code ReadWorkbook} instance targeting the specified spreadsheet
+     * file.
      *
      * @param fpath
      *        path to the workbook file
      * @param tabParam
      *        zero-based worksheet index or worksheet name
+     * 
      * @throws TabularDataException
-     *         if the path is null, the file does not exist, or its extension is not a supported
-     *         Excel format (.xls or .xlsx)
+     *         if the path is null, the file does not exist, its extension is not a valid Excel
+     *         format (.xls or .xlsx)
      */
     public ReadWorkbook(Path fpath, Object tabParam) throws TabularDataException
     {
@@ -92,18 +96,21 @@ public class ReadWorkbook implements ExcelReadable
 
         this.filePath = fpath;
         this.tab = tabParam;
+        this.dataFormatter = new DataFormatter();
+
+        open();
     }
 
     /**
-     * Constructs a {@code ReadWorkbook} instance targeting the specified spreadsheet file,
-     * selecting the default worksheet, typically the first tab.
+     * Constructs and opens a {@code ReadWorkbook} instance targeting the specified spreadsheet
+     * file, selecting the default worksheet, typically the first tab.
      *
      * @param fpath
      *        path to the workbook file
      *
      * @throws TabularDataException
-     *         if the path is null, the file does not exist, or its extension is not a supported
-     *         Excel format (.xls or .xlsx)
+     *         if the path is null, the file does not exist, or its extension is not a valid Excel
+     *         format (.xls or .xlsx)
      */
     public ReadWorkbook(Path fpath) throws TabularDataException
     {
@@ -111,8 +118,8 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Constructs a {@code ReadWorkbook} instance targeting the specified spreadsheet file,
-     * selecting the default worksheet, typically the first tab.
+     * Constructs and opens a {@code ReadWorkbook} instance targeting the specified spreadsheet
+     * file, selecting the default worksheet, typically the first tab.
      *
      * @param file
      *        path to the workbook file in string form
@@ -120,8 +127,8 @@ public class ReadWorkbook implements ExcelReadable
      * @throws InvalidPathException
      *         if the specified path string is invalid
      * @throws TabularDataException
-     *         if the path is null, the file does not exist, or its extension is not a supported
-     *         Excel format (.xls or .xlsx)
+     *         if the path is null, the file does not exist, or its extension is not a valid Excel
+     *         format (.xls or .xlsx)
      */
     public ReadWorkbook(String file) throws TabularDataException
     {
@@ -129,8 +136,8 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Constructs a {@code ReadWorkbook} instance targeting the specified spreadsheet file with the
-     * given worksheet name selected.
+     * Constructs and opens a {@code ReadWorkbook} instance targeting the specified spreadsheet file
+     * with the given worksheet name selected.
      *
      * @param file
      *        path to the workbook file in string form
@@ -140,8 +147,8 @@ public class ReadWorkbook implements ExcelReadable
      * @throws InvalidPathException
      *         if the specified path string is invalid
      * @throws TabularDataException
-     *         if the path is null, the file does not exist, or its extension is not a supported
-     *         Excel format (.xls or .xlsx)
+     *         if the path is null, the file does not exist, or its extension is not a valid Excel
+     *         format (.xls or .xlsx)
      */
     public ReadWorkbook(String file, Object tabParam) throws TabularDataException
     {
@@ -157,40 +164,6 @@ public class ReadWorkbook implements ExcelReadable
     public Path getFilePath()
     {
         return filePath;
-    }
-
-    /**
-     * Opens the workbook, records the number of worksheets, and selects the configured worksheet
-     * when one is specified.
-     *
-     * @throws TabularDataException
-     *         if the workbook cannot be opened or read
-     */
-    @Override
-    public void open() throws TabularDataException
-    {
-        try
-        {
-            workbook = WorkbookFactory.create(filePath.toFile());
-            sheetCount = workbook.getNumberOfSheets();
-            // formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
-            selectSheet();
-        }
-
-        catch (FileNotFoundException exc)
-        {
-            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + filePath + "] does not exist.", exc);
-        }
-
-        catch (EncryptedDocumentException exc)
-        {
-            throw new TabularDataException(ErrorCode.FILE_ACCESS_DENIED, "Unable to read the password-protected workbook [" + filePath + "]. Check password.", exc);
-        }
-
-        catch (IOException exc)
-        {
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "An error occurred while reading data in file [" + filePath + "].", exc);
-        }
     }
 
     /**
@@ -216,16 +189,18 @@ public class ReadWorkbook implements ExcelReadable
 
             finally
             {
-                workbook = null;
-                sheet = null;
-                matrixsize = null;
                 sheetCount = 0;
+                sheet = null;
+                workbook = null;
+                matrixsize = null;
+                formulaEvaluator = null;
             }
         }
     }
 
     /**
-     * Gets the row count of the active worksheet, including any empty rows within its used range.
+     * Gets the row count of the active worksheet, including any empty rows within its active
+     * matrix.
      *
      * @return row count, or 0 if no worksheet is selected
      */
@@ -236,7 +211,7 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Gets the column count of the active worksheet's used range.
+     * Gets the column count of the active worksheet's active matrix.
      *
      * @return column count, or 0 if no worksheet is selected
      */
@@ -262,8 +237,8 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Finds the column index whose cell content matches the specified regular expression, ignoring
-     * case.
+     * Finds the column index whose cell content matches the specified regular expression,
+     * regardless of letter case.
      *
      * @param regex
      *        regular expression pattern to evaluate against cell content
@@ -386,6 +361,7 @@ public class ReadWorkbook implements ExcelReadable
      *
      * @param tabIndex
      *        zero-based worksheet index
+     * 
      * @throws TabularDataException
      *         if the workbook is not open or the index is invalid
      */
@@ -411,6 +387,7 @@ public class ReadWorkbook implements ExcelReadable
      *
      * @param tabName
      *        name of the worksheet
+     * 
      * @throws TabularDataException
      *         if the workbook is not open or the worksheet cannot be found
      */
@@ -422,7 +399,7 @@ public class ReadWorkbook implements ExcelReadable
             throw new TabularDataException(ErrorCode.SHEET_UNKNOWN, "Workbook [" + filePath + "] has not been opened.");
         }
 
-        Sheet selectedSheet = tabName == null ? null : workbook.getSheet(tabName);
+        Sheet selectedSheet = (tabName == null ? null : workbook.getSheet(tabName));
 
         if (selectedSheet == null)
         {
@@ -446,20 +423,19 @@ public class ReadWorkbook implements ExcelReadable
 
         if (sheet != null && columnIndex >= 0 && columnIndex < getColumnCount())
         {
-            int rowCount = getRowCount();
-            for (int i = 0; i < rowCount; i++)
+            for (int i = 0; i < getRowCount(); i++)
             {
                 Row row = sheet.getRow(i);
 
                 if (row != null)
                 {
                     Cell cell = row.getCell(columnIndex, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
-                    String str = formatCellToString(cell);
+                    values.add(formatCellToString(cell));
+                }
 
-                    if (!str.isEmpty())
-                    {
-                        values.add(str);
-                    }
+                else
+                {
+                    values.add("");
                 }
             }
         }
@@ -468,12 +444,9 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Returns all cell values for the column matching the specified header name.
-     *
-     * <p>
-     * Assumes the first row (index 0) contains the column headers.
-     * </p>
-     *
+     * Returns all cell values for the column matching the specified header name, assuming the first
+     * row (index 0) contains the column headers.
+     * 
      * @param headerName
      *        name of the column header to locate (case-insensitive)
      * @return list of cell values for that column, or an empty list if not found
@@ -510,8 +483,7 @@ public class ReadWorkbook implements ExcelReadable
      *        zero-based row index
      * @param col
      *        zero-based column index
-     * @return cell value formatted as string, or an empty string if the cell is blank, out of
-     *         bounds, or if no worksheet is active
+     * @return cell value formatted as string, or an empty string if the cell is blank, out of bounds, or if no worksheet is active
      */
     public String getCellValue(int row, int col)
     {
@@ -539,8 +511,7 @@ public class ReadWorkbook implements ExcelReadable
     /**
      * Selects the initial worksheet and records sheet count.
      *
-     * @throws TabularDataException
-     *         if the selected worksheet is unknown or undefined
+     * @throws TabularDataException if the selected worksheet is unknown or undefined
      */
     protected void selectSheet() throws TabularDataException
     {
@@ -566,8 +537,41 @@ public class ReadWorkbook implements ExcelReadable
     }
 
     /**
-     * Formats a cell value as a string. Formula cells are evaluated to return their calculated
-     * results.
+     * Opens the workbook, determines the number of worksheets, and selects the configured worksheet
+     * when one is specified.
+     *
+     * @throws TabularDataException
+     *         if the workbook cannot be accessed
+     */
+    private void open() throws TabularDataException
+    {
+        try
+        {
+            workbook = WorkbookFactory.create(filePath.toFile());
+            sheetCount = workbook.getNumberOfSheets();
+            formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
+            selectSheet();
+        }
+
+        catch (FileNotFoundException exc)
+        {
+            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + filePath + "] does not exist.", exc);
+        }
+
+        catch (EncryptedDocumentException exc)
+        {
+            throw new TabularDataException(ErrorCode.FILE_ACCESS_DENIED, "Unable to read the password-protected workbook [" + filePath + "]. Check password.", exc);
+        }
+
+        catch (IOException exc)
+        {
+            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "An error occurred while reading data in file [" + filePath + "].", exc);
+        }
+    }
+
+    /**
+     * Formats a cell value as a string. Formula cells are evaluated using a cached FormulaEvaluator
+     * to return calculated results efficiently.
      *
      * @param cell
      *        Apache POI cell to format
@@ -579,8 +583,7 @@ public class ReadWorkbook implements ExcelReadable
         {
             try
             {
-                FormulaEvaluator formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
-                CellValue value = formulaEvaluator.evaluate(cell);
+                CellValue value = (formulaEvaluator != null) ? formulaEvaluator.evaluate(cell) : null;
 
                 if (value != null)
                 {

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -24,24 +25,13 @@ import io.TabularDataException.ErrorCode;
  * escaped quotes, and multiline records.
  *
  * <p>
- * Implements {@link Readable} and {@link Iterable} for uniform table processing. The base class
- * automatically sanitises internal newlines during row processing. Subclasses can override
- * {@link #processHeader(String[])} or extend {@link #processRow(String[], int)} to apply custom
- * validation, schema checking, or domain-specific data transformations.
+ * Implements {@link Readable} and {@link Iterable} for uniform table processing. The CSV file is
+ * parsed and loaded automatically upon construction and closed after use. A
+ * {@code try-with-resources} statement is strongly recommended.
  * </p>
  *
- * <b>Change log:</b>
- *
- * <ul>
- * <li>7 February 2025 - Initial creation as AbstractCSVReader.</li>
- * <li>8 October 2026 - Re-factored to concrete ReadCSV in io.reader, added RFC 4180-compliant
- * multi-line record parsing, and integrated TabularDataException.</li>
- * <li>10 October 2026 - Updated matrix column sizing to evaluate maximum row width across the whole
- * document.</li>
- * </ul>
- *
  * @author Trevor Maggs
- * @version 0.6
+ * @version 0.7
  * @since 7 February 2025
  */
 public class ReadCSV implements Readable
@@ -52,13 +42,13 @@ public class ReadCSV implements Readable
     private int maxColumnSize;
 
     /**
-     * Constructs a {@code ReadCSV} instance targeting the specified file path.
+     * Constructs and parses a {@code ReadCSV} instance targeting the specified file path.
      *
      * @param csvFile
      *        path to the target CSV file
      *
      * @throws TabularDataException
-     *         if the file path is null or does not point to a regular file
+     *         if the file path is null, does not exist, is not a regular file, or parsing fails
      */
     public ReadCSV(Path csvFile) throws TabularDataException
     {
@@ -82,18 +72,20 @@ public class ReadCSV implements Readable
         this.maxColumnSize = 0;
         this.filePath = csvFile;
         this.dataset = new ArrayList<>();
+
+        open();
     }
 
     /**
-     * Constructs a {@code ReadCSV} instance for the specified CSV file path.
+     * Constructs and parses a {@code ReadCSV} instance for the specified CSV file path string.
      *
      * @param csvFile
-     *        path to the target CSV file
+     *        path to the target CSV file in string form
      *
      * @throws InvalidPathException
      *         if the specified path string is invalid
      * @throws TabularDataException
-     *         if the path is null or does not point to a regular file
+     *         if the path is null, does not exist, or parsing fails
      */
     public ReadCSV(String csvFile) throws TabularDataException
     {
@@ -140,61 +132,6 @@ public class ReadCSV implements Readable
     public Path getFilePath()
     {
         return filePath;
-    }
-
-    /**
-     * Opens and parses the CSV file contents into memory, tokenising multi-line records and
-     * applying {@link #processRow(String[], int)} sanitisation to populated rows.
-     *
-     * @throws TabularDataException
-     *         if the file cannot be accessed, does not exist, or an I/O error occurs
-     */
-    @Override
-    public void open() throws TabularDataException
-    {
-        dataset.clear();
-        maxColumnSize = 0;
-
-        try (BufferedReader br = Files.newBufferedReader(filePath, StandardCharsets.UTF_8))
-        {
-            lineNumber = 0;
-            String[] record;
-
-            while ((record = parseDataCSV(br)) != null)
-            {
-                if (lineNumber == 0)
-                {
-                    processHeader(record);
-                }
-
-                else
-                {
-                    processRow(record, lineNumber);
-                }
-
-                // Find the maximum width for uniform matrix across all rows
-                maxColumnSize = Math.max(maxColumnSize, record.length);
-
-                lineNumber++;
-                dataset.add(record);
-            }
-
-            normaliseMatrixWidth();
-        }
-
-        catch (NoSuchFileException exc)
-        {
-            dataset.clear();
-            maxColumnSize = 0;
-            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + filePath + "] does not exist.", exc);
-        }
-
-        catch (IOException exc)
-        {
-            dataset.clear();
-            maxColumnSize = 0;
-            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "An error occurred while reading CSV file [" + filePath + "].", exc);
-        }
     }
 
     /**
@@ -295,6 +232,77 @@ public class ReadCSV implements Readable
     }
 
     /**
+     * Returns all cell values for the specified column index across the CSV dataset.
+     *
+     * @param columnIndex
+     *        zero-based column index
+     * @return list of cell values as strings for the specified column
+     */
+    @Override
+    public List<String> getColumnValues(int columnIndex)
+    {
+        List<String> values = new ArrayList<>();
+
+        if (columnIndex >= 0 && columnIndex < getColumnCount())
+        {
+            int rowCount = getRowCount();
+            for (int i = 0; i < rowCount; i++)
+            {
+                String[] row = dataset.get(i);
+
+                if (row != null && columnIndex < row.length)
+                {
+                    values.add(row[columnIndex] != null ? row[columnIndex] : "");
+                }
+                else
+                {
+                    values.add("");
+                }
+            }
+        }
+
+        return values;
+    }
+
+    /**
+     * Returns all data cell values for the column matching the specified header name.
+     *
+     * <p>
+     * Assumes the first row (index 0) contains the column headers, and strips the header row
+     * from the returned list.
+     * </p>
+     *
+     * @param headerName
+     *        name of the column header to locate (case-insensitive)
+     * @return list of data cell values for that column, or an empty list if not found
+     */
+    @Override
+    public List<String> getColumnValues(String headerName)
+    {
+        headerName = Objects.requireNonNull(headerName, "Header cannot be null").trim();
+
+        if (!headerName.isEmpty())
+        {
+            int colIndex = findColumnIndexByContent(headerName, 0);
+
+            if (colIndex != -1)
+            {
+                List<String> values = getColumnValues(colIndex);
+
+                if (!values.isEmpty())
+                {
+                    // Removes the header text itself, leaving only data values
+                    values.remove(0);
+                }
+
+                return values;
+            }
+        }
+
+        return new ArrayList<>();
+    }
+
+    /**
      * Returns a string cell value at the specified row and column coordinates.
      *
      * @param row
@@ -357,6 +365,60 @@ public class ReadCSV implements Readable
     }
 
     /**
+     * Parses the CSV file contents into memory, tokenising multi-line records and facilitating
+     * sanitisation to populated rows.
+     *
+     * @throws TabularDataException
+     *         if the file cannot be accessed, does not exist, or an I/O error occurs
+     */
+    private void open() throws TabularDataException
+    {
+        dataset.clear();
+        maxColumnSize = 0;
+
+        try (BufferedReader br = Files.newBufferedReader(filePath, StandardCharsets.UTF_8))
+        {
+            lineNumber = 0;
+            String[] record;
+
+            while ((record = parseDataCSV(br)) != null)
+            {
+                if (lineNumber == 0)
+                {
+                    processHeader(record);
+                }
+
+                else
+                {
+                    processRow(record, lineNumber);
+                }
+
+                // Find the maximum width for uniform matrix across all rows
+                maxColumnSize = Math.max(maxColumnSize, record.length);
+
+                lineNumber++;
+                dataset.add(record);
+            }
+
+            normaliseMatrixWidth();
+        }
+
+        catch (NoSuchFileException exc)
+        {
+            dataset.clear();
+            maxColumnSize = 0;
+            throw new TabularDataException(ErrorCode.FILE_NOT_FOUND, "File [" + filePath + "] does not exist.", exc);
+        }
+
+        catch (IOException exc)
+        {
+            dataset.clear();
+            maxColumnSize = 0;
+            throw new TabularDataException(ErrorCode.STREAM_READ_FAILED, "An error occurred while reading CSV file [" + filePath + "].", exc);
+        }
+    }
+
+    /**
      * Parses a single multi-line CSV record from a BufferedReader according to RFC 4180. Handles
      * quotes, escaped quotes (""), embedded newlines, custom whitespace (including NBSP), and
      * leading/trailing unquoted trimming.
@@ -364,7 +426,7 @@ public class ReadCSV implements Readable
      * @param br
      *        BufferedReader stream positioned at the record start
      * @return String[] representing tokenised field values, or null if EOF reached
-     * 
+     *
      * @throws IOException
      *         if an unterminated double-quoted field is encountered
      */
@@ -457,6 +519,33 @@ public class ReadCSV implements Readable
     }
 
     /**
+     * Pads all rows in the dataset to match the maximum column width across the file.
+     */
+    private void normaliseMatrixWidth()
+    {
+        if (maxColumnSize > 0 && !dataset.isEmpty())
+        {
+            for (int i = 0; i < dataset.size(); i++)
+            {
+                String[] row = dataset.get(i);
+
+                if (row.length < maxColumnSize)
+                {
+                    String[] replaceRow = new String[maxColumnSize];
+                    System.arraycopy(row, 0, replaceRow, 0, row.length);
+
+                    for (int j = row.length; j < maxColumnSize; j++)
+                    {
+                        replaceRow[j] = "";
+                    }
+
+                    dataset.set(i, replaceRow);
+                }
+            }
+        }
+    }
+
+    /**
      * Evaluates whether a character represents ASCII whitespace, Java Unicode whitespace,
      * or a Non-Breaking Space ({@code \u00A0}).
      *
@@ -491,32 +580,5 @@ public class ReadCSV implements Readable
         }
 
         return (len == input.length()) ? input : input.substring(0, len);
-    }
-
-    /**
-     * Pads all rows in the dataset to match the maximum column width across the file.
-     */
-    private void normaliseMatrixWidth()
-    {
-        if (maxColumnSize > 0 && !dataset.isEmpty())
-        {
-            for (int i = 0; i < dataset.size(); i++)
-            {
-                String[] row = dataset.get(i);
-
-                if (row.length < maxColumnSize)
-                {
-                    String[] replaceRow = new String[maxColumnSize];
-                    System.arraycopy(row, 0, replaceRow, 0, row.length);
-
-                    for (int j = row.length; j < maxColumnSize; j++)
-                    {
-                        replaceRow[j] = "";
-                    }
-
-                    dataset.set(i, replaceRow);
-                }
-            }
-        }
     }
 }

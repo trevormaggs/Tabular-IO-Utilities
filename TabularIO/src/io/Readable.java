@@ -1,28 +1,31 @@
 package io;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Defines the contract for reading tabular data sources, such as spreadsheets and CSV files.
  *
  * <p>
- * Implementations provide mechanisms to open and close data resources, inspect data dimensions,
- * locate columns by cell content or regular expression, and iterate over rows represented as arrays
- * of strings.
+ * Implementations provide mechanisms to inspect data dimensions, locate columns by cell content or
+ * regular expression, extract column values, and iterate over rows represented as arrays of
+ * strings.
  * </p>
  *
  * <p>
- * Implementations may require {@link #open()} to be called before data can be accessed. Resources
- * should be released by calling {@link #close()}.
+ * Data resources are opened automatically upon construction and should be released by closing the
+ * resource. A {@code try-with-resources} statement is strongly recommended.
  * </p>
  *
  * <b>Change log:</b>
  * <ul>
  * <li>7 October 2026 - Initial creation.</li>
+ * <li>17 October 2026 - Removed explicit open() method to support auto-opening constructors and
+ * added column values extraction contracts.</li>
  * </ul>
  * 
  * @author Trevor Maggs
- * @version 0.1
+ * @version 0.2
  * @since 7 October 2026
  */
 public interface Readable extends AutoCloseable, Iterable<String[]>
@@ -35,16 +38,8 @@ public interface Readable extends AutoCloseable, Iterable<String[]>
     Path getFilePath();
 
     /**
-     * Opens and initialises the underlying data resource for reading.
-     *
-     * @throws TabularDataException
-     *         if the resource cannot be opened or parsed
-     */
-    void open() throws TabularDataException;
-
-    /**
-     * Closes the underlying resource and releases associated resources, such as open file handles
-     * or buffers.
+     * Closes the reader and releases any associated resources. Calling this method more than once
+     * has no additional effect.
      *
      * @throws TabularDataException
      *         if an error occurs while closing the resource
@@ -114,4 +109,22 @@ public interface Readable extends AutoCloseable, Iterable<String[]>
     {
         return findColumnIndexRegex(regex, 0);
     }
+
+    /**
+     * Returns all cell values for the specified column index across the data source.
+     *
+     * @param columnIndex
+     *        zero-based column index
+     * @return list of cell values as strings for the specified column
+     */
+    List<String> getColumnValues(int columnIndex);
+
+    /**
+     * Returns all cell values for the column matching the specified header name.
+     *
+     * @param headerName
+     *        name of the column header to locate (case-insensitive)
+     * @return list of cell values for that column, or an empty list if not found
+     */
+    List<String> getColumnValues(String headerName);
 }
