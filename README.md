@@ -101,6 +101,13 @@ The library can be integrated into Java applications through its reading and wri
 
 Each example is collapsible. Expand a section to view its code.
 
+### Choosing a Reading Approach
+
+- **`ReadCSV`** — Read CSV files using row iteration or a callback.
+- **`ReadWorkbook`** — Read Excel worksheets using standard row iteration, with workbook-specific features such as worksheet selection.
+- **`EventExcelReader`** — Process `.xlsx` worksheets incrementally using event-driven parsing, particularly when working with large files.
+- **`NamedRowConsumer`** — Access selected worksheet columns by header name rather than numeric column index.
+
 ### Usage Examples
 
 <details>
