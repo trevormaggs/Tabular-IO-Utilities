@@ -177,10 +177,10 @@ public class TestTabularIO
 
     public static void main(String[] args)
     {
-        // testReadCSV();
+        testReadCSV();
         // testReadWorkbook();
         // testReadWorkbookIterator();
         // testEventExcelReader();
-        testAlternatingRowFactory();
+        // testAlternatingRowFactory();
     }
 }

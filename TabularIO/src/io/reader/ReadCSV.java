@@ -13,6 +13,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -21,36 +22,46 @@ import io.TabularDataException;
 import io.TabularDataException.ErrorCode;
 
 /**
- * Reads CSV files into memory using a quote-aware state-machine parser that supports quoted fields,
- * escaped quotes, and multiline records.
+ * Reads CSV files into memory using a quote-aware parser that supports quoted fields, escaped
+ * quotes, and multiline records.
  *
  * <p>
- * Implements {@link Readable} and {@link Iterable} for uniform table processing. The CSV file is
- * parsed and loaded automatically upon construction and closed after use. A
- * {@code try-with-resources} statement is strongly recommended.
+ * The CSV file is parsed automatically when an instance is constructed. Parsed records are retained
+ * in memory until {@link #close()} is called. The class provides tabular access through
+ * {@link Readable} and supports row iteration through its iterator implementation.
+ * </p>
+ *
+ * <p>
+ * A {@code try-with-resources} statement is strongly recommended when processing is complete,
+ * unless {@link #close()} is called explicitly.
  * </p>
  *
  * @author Trevor Maggs
  * @version 0.7
  * @since 7 February 2025
  */
-public class ReadCSV implements Readable
+public final class ReadCSV implements Readable
 {
     private final Path filePath;
     private final List<String[]> dataset;
+    private final BiConsumer<String[], Integer> rowProcessor;
     private int lineNumber;
     private int maxColumnSize;
 
     /**
-     * Constructs and parses a {@code ReadCSV} instance targeting the specified file path.
+     * Constructs and parses a {@code ReadCSV} instance targeting the specified file path, using a
+     * custom row processor callback for streaming row/header inspection if needed.
      *
      * @param csvFile
      *        path to the target CSV file
+     * @param rowProcessor
+     *        an optional {@link BiConsumer} callback accepting row tokens and line numbers during
+     *        parsing
      *
      * @throws TabularDataException
      *         if the file path is null, does not exist, is not a regular file, or parsing fails
      */
-    public ReadCSV(Path csvFile) throws TabularDataException
+    public ReadCSV(Path csvFile, BiConsumer<String[], Integer> rowProcessor) throws TabularDataException
     {
         if (csvFile == null)
         {
@@ -72,12 +83,38 @@ public class ReadCSV implements Readable
         this.maxColumnSize = 0;
         this.filePath = csvFile;
         this.dataset = new ArrayList<>();
+        this.rowProcessor = rowProcessor != null ? rowProcessor : new BiConsumer<String[], Integer>()
+        {
+            @Override
+            public void accept(String[] rowTokens, Integer lineNumber)
+            {
+                // Do nothing unless specified
+            }
+        };
 
         open();
     }
 
     /**
-     * Constructs and parses a {@code ReadCSV} instance for the specified CSV file path string.
+     * Constructs and parses a {@code ReadCSV} instance targeting the specified file path.
+     *
+     * @param csvFile
+     *        path to the target CSV file
+     *
+     * @throws InvalidPathException
+     *         if the specified path string is invalid
+     * @throws TabularDataException
+     *         if the path is null, does not identify a regular file,
+     *         has an unsupported file extension, or the CSV cannot be parsed
+     */
+    public ReadCSV(Path csvFile) throws TabularDataException
+    {
+        this(csvFile, null);
+    }
+
+    /**
+     * Constructs and parses a {@code ReadCSV} instance for the specified CSV file path string
+     * with default no-op row processing.
      *
      * @param csvFile
      *        path to the target CSV file in string form
@@ -85,11 +122,32 @@ public class ReadCSV implements Readable
      * @throws InvalidPathException
      *         if the specified path string is invalid
      * @throws TabularDataException
-     *         if the path is null, does not exist, or parsing fails
+     *         if the path is null, does not identify a regular file,
+     *         has an unsupported file extension, or the CSV cannot be parsed
      */
     public ReadCSV(String csvFile) throws TabularDataException
     {
         this(csvFile == null ? null : Paths.get(csvFile));
+    }
+
+    /**
+     * Constructs and parses a {@code ReadCSV} instance for the specified CSV file path string
+     * and custom row processor callback.
+     *
+     * @param csvFile
+     *        path to the target CSV file in string form
+     * @param rowProcessor
+     *        a {@link BiConsumer} callback accepting row tokens and line numbers during parsing
+     *
+     * @throws InvalidPathException
+     *         if the specified path string is invalid
+     * @throws TabularDataException
+     *         if the path is null, does not identify a regular file,
+     *         has an unsupported file extension, or the CSV cannot be parsed
+     */
+    public ReadCSV(String csvFile, BiConsumer<String[], Integer> rowProcessor) throws TabularDataException
+    {
+        this(csvFile == null ? null : Paths.get(csvFile), rowProcessor);
     }
 
     /**
@@ -246,6 +304,7 @@ public class ReadCSV implements Readable
         if (columnIndex >= 0 && columnIndex < getColumnCount())
         {
             int rowCount = getRowCount();
+
             for (int i = 0; i < rowCount; i++)
             {
                 String[] row = dataset.get(i);
@@ -265,16 +324,19 @@ public class ReadCSV implements Readable
     }
 
     /**
-     * Returns all data cell values for the column matching the specified header name.
+     * Returns the data values for the column identified by its header.
      *
      * <p>
-     * Assumes the first row (index 0) contains the column headers, and strips the header row
-     * from the returned list.
+     * The first record is treated as the header record. Matching is case-insensitive, and the
+     * header itself is excluded from the result.
      * </p>
      *
      * @param headerName
-     *        name of the column header to locate (case-insensitive)
-     * @return list of data cell values for that column, or an empty list if not found
+     *        column header to locate
+     * @return data values for the matching column, or an empty list if no matching header exists
+     * 
+     * @throws NullPointerException
+     *         if headerName is null
      */
     @Override
     public List<String> getColumnValues(String headerName)
@@ -328,45 +390,8 @@ public class ReadCSV implements Readable
     }
 
     /**
-     * Optional hook method executed when the header row (row 0) is parsed.
-     *
-     * @param headers
-     *        array of header tokens
-     */
-    protected void processHeader(String[] headers)
-    {
-        // Default implementation does nothing. Subclasses can override if needed
-    }
-
-    /**
-     * Executes post-processing on each parsed content row greater than zero (first row) position.
-     *
-     * <p>
-     * The base implementation flattens embedded line breaks into single spaces and trims cell
-     * values. Subclasses overriding this method should invoke
-     * {@code super.processRow(rowTokens, lineNumber)} if they wish to retain default string
-     * sanitisation prior to executing custom validation.
-     * </p>
-     *
-     * @param rowTokens
-     *        array of raw cell tokens for the current record
-     * @param lineNumber
-     *        1-based data row index (where header is row 0)
-     */
-    protected void processRow(String[] rowTokens, int lineNumber)
-    {
-        for (int i = 0; i < rowTokens.length; i++)
-        {
-            if (rowTokens[i] != null)
-            {
-                rowTokens[i] = rowTokens[i].replaceAll("[\\r\\n]+", " ").trim();
-            }
-        }
-    }
-
-    /**
      * Parses the CSV file contents into memory, tokenising multi-line records and facilitating
-     * sanitisation to populated rows.
+     * sanitisation and callback processing.
      *
      * @throws TabularDataException
      *         if the file cannot be accessed, does not exist, or an I/O error occurs
@@ -375,7 +400,7 @@ public class ReadCSV implements Readable
     {
         dataset.clear();
         maxColumnSize = 0;
-        
+
         try (BufferedReader br = Files.newBufferedReader(filePath, StandardCharsets.UTF_8))
         {
             lineNumber = 0;
@@ -383,15 +408,8 @@ public class ReadCSV implements Readable
 
             while ((record = parseDataCSV(br)) != null)
             {
-                if (lineNumber == 0)
-                {
-                    processHeader(record);
-                }
-
-                else
-                {
-                    processRow(record, lineNumber);
-                }
+                sanitise(record);
+                rowProcessor.accept(record, lineNumber);
 
                 // Find the maximum width for uniform matrix across all rows
                 maxColumnSize = Math.max(maxColumnSize, record.length);
@@ -419,103 +437,130 @@ public class ReadCSV implements Readable
     }
 
     /**
-     * Parses a single multi-line CSV record from a BufferedReader according to RFC 4180. Handles
-     * quotes, escaped quotes (""), embedded newlines, custom whitespace (including NBSP), and
-     * leading/trailing unquoted trimming.
+     * Sanitises the values in a parsed CSV record.
+     *
+     * <p>
+     * Replaces each consecutive sequence of carriage return and line feed characters within a cell
+     * value with a single space. Other whitespace, including leading and trailing spaces, is
+     * preserved.
+     * </p>
+     *
+     * @param rowTokens
+     *        array of parsed cell values for the current record
+     */
+    private void sanitise(String[] rowTokens)
+    {
+        for (int i = 0; i < rowTokens.length; i++)
+        {
+            if (rowTokens[i] != null)
+            {
+                rowTokens[i] = rowTokens[i].replaceAll("[\\r\\n]+", " ");
+            }
+        }
+    }
+
+    /**
+     * Parses a single CSV record from a {@link BufferedReader}, supporting b quoted fields, escaped
+     * double quotes, and embedded line breaks.
+     *
+     * <p>
+     * Leading whitespace outside quoted fields is skipped, and trailing whitespace is removed from
+     * each field. Whitespace handling depends on {@code isWhitespace(char)}. This parser is
+     * permissive and does not enforce all RFC 4180 syntax rules.
+     * </p>
      *
      * @param br
-     *        BufferedReader stream positioned at the record start
-     * @return String[] representing tokenised field values, or null if EOF reached
+     *        reader positioned at the start of the next CSV record
+     * @return parsed field values, or {@code null} if EOF is reached before any record is read
      *
      * @throws IOException
-     *         if an unterminated double-quoted field is encountered
+     *         if an unterminated quoted field is encountered at EOF or an I/O error occurs
      */
     private String[] parseDataCSV(BufferedReader br) throws IOException
     {
-        String line = br.readLine();
+        String line;
+        List<String> tokens = new ArrayList<>();
+        StringBuilder sb = new StringBuilder();
+        boolean inQuotes = false;
+        boolean fieldStart = true;
 
-        if (line != null)
+        while ((line = br.readLine()) != null)
         {
-            List<String> tokens = new ArrayList<>();
-            StringBuilder sb = new StringBuilder();
-            boolean inQuotes = false;
-            boolean fieldStart = true;
-
-            while (line != null)
+            for (int i = 0; i < line.length(); i++)
             {
-                for (int i = 0; i < line.length(); i++)
+                char c = line.charAt(i);
+
+                // Skip leading unquoted whitespace
+                if (fieldStart && !inQuotes && isWhitespace(c))
                 {
-                    char c = line.charAt(i);
+                    continue;
+                }
 
-                    // Skip leading unquoted whitespace
-                    if (fieldStart && !inQuotes && isWhitespace(c))
+                if (c == '"')
+                {
+                    if (!inQuotes)
                     {
-                        continue;
-                    }
-
-                    if (c == '"')
-                    {
-                        if (!inQuotes)
+                        if (sb.length() == 0)
                         {
-                            if (sb.length() == 0)
-                            {
-                                inQuotes = true;
-                            }
-
-                            else
-                            {
-                                sb.append(c);
-                            }
+                            inQuotes = true;
                         }
 
                         else
                         {
-                            // Check for doubled-up escaped quote ("")
-                            if (i + 1 < line.length() && line.charAt(i + 1) == '"')
-                            {
-                                sb.append('"');
-                                i++;
-                            }
-
-                            else
-                            {
-                                inQuotes = false;
-                            }
+                            sb.append(c);
                         }
-
-                        fieldStart = false;
-                    }
-
-                    else if (c == ',' && !inQuotes)
-                    {
-                        // Clean up trailing unquoted spaces
-                        tokens.add(trimTrailing(sb.toString()));
-                        sb.setLength(0);
-                        fieldStart = true;
                     }
 
                     else
                     {
-                        sb.append(c);
-                        fieldStart = false;
+                        // Check for doubled-up escaped quote ("")
+                        if (i + 1 < line.length() && line.charAt(i + 1) == '"')
+                        {
+                            sb.append('"');
+                            i++;
+                        }
+
+                        else
+                        {
+                            inQuotes = false;
+                        }
                     }
+
+                    fieldStart = false;
                 }
 
-                if (!inQuotes)
+                else if (c == ',' && !inQuotes)
                 {
+                    // Clean up trailing unquoted spaces
                     tokens.add(trimTrailing(sb.toString()));
-                    return tokens.toArray(new String[0]);
+                    sb.setLength(0);
+                    fieldStart = true;
                 }
 
-                sb.append('\n');
-                line = br.readLine();
+                else
+                {
+                    sb.append(c);
+                    fieldStart = false;
+                }
             }
 
-            // Reached end-of-file inside quotes
+            if (!inQuotes)
+            {
+                tokens.add(trimTrailing(sb.toString()));
+                return tokens.toArray(new String[0]);
+            }
+
+            sb.append('\n');
+        }
+
+        // Reached end-of-file inside quotes
+        if (inQuotes)
+        {
             throw new IOException("Malformed CSV: Unterminated double-quoted field encountered.");
         }
 
-        return null; // Stream end reached
+        // Stream ended
+        return null;
     }
 
     /**
