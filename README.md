@@ -141,17 +141,17 @@ Path csvFile = Paths.get("metadata.csv");
 
 try (Readable reader = new ReadCSV(csvFile))
 {
-	System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
-	{	
-		Iterator<String[]> iterator = reader.iterator();
-		
-		// Uses an Iterator provided to loop over each row as a String array
-		while (iterator.hasNext())
-		{
-			String[] row = iterator.next();
-			System.out.println(Arrays.toString(row));
-		}
-	}
+  System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+  {
+    Iterator<String[]> iterator = reader.iterator();
+    
+    // Uses an Iterator provided to loop over each row as a String array
+    while (iterator.hasNext())
+    {
+      String[] row = iterator.next();
+      System.out.println(Arrays.toString(row));
+    }
+  }
 }
 
 catch (TabularDataException exc)
@@ -171,21 +171,21 @@ Path csvFile = Paths.get("customer.csv");
 
 BiConsumer<String[], Integer> consumer = new BiConsumer<String[], Integer>()
 {
-	@Override
-	public void accept(String[] row, Integer lineNumber)
-	{
-		if (lineNumber == 0)
-		{		
-			// Process headers if required
-			System.out.println(Arrays.toString(row));
-		}
-		
-		else
-		{
-			// Process regular contents
-			System.out.println(Arrays.toString(row));
-		}
-	}
+  @Override
+  public void accept(String[] row, Integer lineNumber)
+  {
+    if (lineNumber == 0)
+    {
+      // Process headers if required
+      System.out.println(Arrays.toString(row));
+    }
+    
+    else
+    {
+      // Process regular contents
+      System.out.println(Arrays.toString(row));
+    }
+  }
 };
 
 try (ReadCSV reader = new ReadCSV(csvFile, consumer))
