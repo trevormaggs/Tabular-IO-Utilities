@@ -6,14 +6,15 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import io.ExcelWritable;
+import io.Readable;
+import io.TabularDataException;
 import io.reader.EventExcelReader;
 import io.reader.ReadCSV;
 import io.reader.ReadWorkbook;
 import io.style.AlternatingRowFactory;
 import io.writer.WriteWorkbook;
-import io.ExcelWritable;
-import io.Readable;
-import io.TabularDataException;
 
 public class TestTabularIO
 {
@@ -30,6 +31,69 @@ public class TestTabularIO
             {
                 System.out.println(Arrays.toString(row));
             }
+        }
+
+        catch (TabularDataException exc)
+        {
+            System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+        }
+    }
+
+    public static void testIterativeReadCSV()
+    {
+        Path csvFile = Paths.get("src/io/test/DESKTOP-E0REK70_metadata.csv");
+
+        try (Readable reader = new ReadCSV(csvFile))
+        {
+            System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+
+            {
+                Iterator<String[]> iterator = reader.iterator();
+
+                // Uses an Iterator provided to loop over each row as a String array
+                while (iterator.hasNext())
+                {
+                    String[] row = iterator.next();
+
+                    System.out.println(Arrays.toString(row));
+                }
+            }
+        }
+
+        catch (TabularDataException exc)
+        {
+            System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+        }
+    }
+
+    public static void testCallbackReadCSV()
+    {
+        Path csvFile = Paths.get("src/io/test/DESKTOP-E0REK70_metadata.csv");
+
+        BiConsumer<String[], Integer> consumer = new BiConsumer<String[], Integer>()
+        {
+            @Override
+            public void accept(String[] row, Integer lineNumber)
+            {
+                if (lineNumber == 0)
+                {
+                    // Process headers if required
+                    System.out.println(Arrays.toString(row));
+                }
+
+                else
+                {
+                    // Process regular contents
+                    System.out.println(Arrays.toString(row));
+                }
+            }
+        };
+
+        try (ReadCSV reader = new ReadCSV(csvFile, consumer))
+        {
+            // Parsing and processing are fully completed inside the try-with-resources block!
+
+            System.out.printf("\nDimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
         }
 
         catch (TabularDataException exc)
@@ -177,7 +241,9 @@ public class TestTabularIO
 
     public static void main(String[] args)
     {
-        testReadCSV();
+        // testReadCSV();
+        testIterativeReadCSV();
+        // testCallbackReadCSV();
         // testReadWorkbook();
         // testReadWorkbookIterator();
         // testEventExcelReader();

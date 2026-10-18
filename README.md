@@ -120,18 +120,89 @@ try (Readable reader = new ReadCSV(csvFile))
 	// Iterate over rows represented as String arrays
 	for (String[] row : reader)
 	{
-		System.out.println(Arrays.toString(row));
+	  System.out.println(Arrays.toString(row));
 	}
 }
 
 catch (TabularDataException exc)
 {
-	System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+  System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
 }
 ```
 </details>
+
 <details>
-<summary><strong>2. Reading Standard Excel Workbooks via an Iterator (<code>ReadWorkbook</code>)</strong></summary>
+<summary><strong>2. Reading CSV Files via an Iterator</strong></summary>
+
+Alternatively, you can implement an Iterator to access to the data. It is also lightweight and fast.
+
+```java
+Path csvFile = Paths.get("metadata.csv");
+
+try (Readable reader = new ReadCSV(csvFile))
+{
+	System.out.printf("Dimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+	{	
+		Iterator<String[]> iterator = reader.iterator();
+		
+		// Uses an Iterator provided to loop over each row as a String array
+		while (iterator.hasNext())
+		{
+			String[] row = iterator.next();
+			System.out.println(Arrays.toString(row));
+		}
+	}
+}
+
+catch (TabularDataException exc)
+{
+  System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+</details>
+
+<details>
+<summary><strong>3. Reading CSV Files using a callback Consumer pattern</strong></summary>
+
+You can also opt to apply a callback mechanism, where you can define your desired logic and supply to the constructor.
+
+```java
+Path csvFile = Paths.get("customer.csv");
+
+BiConsumer<String[], Integer> consumer = new BiConsumer<String[], Integer>()
+{
+	@Override
+	public void accept(String[] row, Integer lineNumber)
+	{
+		if (lineNumber == 0)
+		{		
+			// Process headers if required
+			System.out.println(Arrays.toString(row));
+		}
+		
+		else
+		{
+			// Process regular contents
+			System.out.println(Arrays.toString(row));
+		}
+	}
+};
+
+try (ReadCSV reader = new ReadCSV(csvFile, consumer))
+{
+  // Parsing and processing are fully completed inside the try-with-resources block.
+  System.out.printf("\nDimension: Rows[%d], Columns [%d]%n%n", reader.getRowCount(), reader.getColumnCount());
+}
+
+catch (TabularDataException exc)
+{
+  System.err.printf("[%s] %s%n", exc.getErrorCode(), exc.getMessage());
+}
+```
+</details>
+
+<details>
+<summary><strong>4. Reading Standard Excel Workbooks via an Iterator (<code>ReadWorkbook</code>)</strong></summary>
 
 Use `ReadWorkbook` when you want to iterate every row within the chosen workbook, including formula evaluation, and formatted strings.
 
@@ -171,7 +242,7 @@ In this example:
 
 </details>        
 <details>
-<summary><strong>3. Reading Standard Excel Workbooks (<code>ReadWorkbook</code>)</strong></summary>
+<summary><strong>5. Reading Standard Excel Workbooks (<code>ReadWorkbook</code>)</strong></summary>
 
 Use `ReadWorkbook` when you want workbook access, formula evaluation, and formatted strings.
 
@@ -202,7 +273,7 @@ catch (TabularDataException exc)
 ```
 </details>
 <details>
-<summary><strong>4. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
+<summary><strong>6. Streaming Large Excel Files (<code>EventExcelReader</code>)</strong></summary>
 
 For large `.xlsx` files, `EventExcelReader` supports low-memory, event-driven SAX parsing using a consumer callback pattern.
 
@@ -235,7 +306,7 @@ catch (TabularDataException exc)
 ```
 </details>
 <details>
-<summary><strong>5. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
+<summary><strong>7. Reading Excel Rows as Maps (<code>NamedRowConsumer</code>)</strong></summary>
 
 When processing worksheets with known column headers, `NamedRowConsumer` provides each row as a `Map<String, String>`. This allows values to be accessed by column name instead of by numeric index. You can specify which columns to include when constructing the consumer.
 
@@ -279,7 +350,7 @@ In this example:
 This approach is useful when column positions may change but the header names remain consistent.
 </details>
 <details>
-<summary><strong>6. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
+<summary><strong>8. Writing Excel Workbooks (<code>ExcelWritable</code>)</strong></summary>
 
 Create a workbook, write headers and data rows, and configure an auto-filter.
 

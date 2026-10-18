@@ -35,6 +35,15 @@ import io.TabularDataException.ErrorCode;
  * A {@code try-with-resources} statement is strongly recommended when processing is complete,
  * unless {@link #close()} is called explicitly.
  * </p>
+ * 
+ * <b>Change log</b>
+ *
+ * <ul>
+ * <li>Created by Trevor Maggs on 13 November 2024</li>
+ * <li>Overhauled by Trevor Maggs on 18 October 2025 to assert Josh Bloch's Effective Java book,
+ * "Design and document for inheritance or else prohibit it" (Item 19), therefore it favours
+ * composition over inheritance to prevent complexity (Item 18)</li>
+ * </ul>
  *
  * @author Trevor Maggs
  * @version 0.7
@@ -92,7 +101,7 @@ public final class ReadCSV implements Readable
             }
         };
 
-        open();
+        parse();
     }
 
     /**
@@ -313,6 +322,7 @@ public final class ReadCSV implements Readable
                 {
                     values.add(row[columnIndex] != null ? row[columnIndex] : "");
                 }
+                
                 else
                 {
                     values.add("");
@@ -396,7 +406,7 @@ public final class ReadCSV implements Readable
      * @throws TabularDataException
      *         if the file cannot be accessed, does not exist, or an I/O error occurs
      */
-    private void open() throws TabularDataException
+    private void parse() throws TabularDataException
     {
         dataset.clear();
         maxColumnSize = 0;
@@ -479,10 +489,10 @@ public final class ReadCSV implements Readable
     private String[] parseDataCSV(BufferedReader br) throws IOException
     {
         String line;
-        List<String> tokens = new ArrayList<>();
-        StringBuilder sb = new StringBuilder();
         boolean inQuotes = false;
         boolean fieldStart = true;
+        StringBuilder sb = new StringBuilder();
+        List<String> tokens = new ArrayList<>();
 
         while ((line = br.readLine()) != null)
         {
