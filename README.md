@@ -103,10 +103,10 @@ Each example is collapsible. Expand a section to view its code.
 
 ### Choosing a Reading Approach
 
-- **`ReadCSV`** — Read CSV files using row iteration or a callback.
-- **`ReadWorkbook`** — Read Excel worksheets using standard row iteration, with workbook-specific features such as worksheet selection.
-- **`EventExcelReader`** — Process `.xlsx` worksheets incrementally using event-driven parsing, particularly when working with large files.
-- **`NamedRowConsumer`** — Access selected worksheet columns by header name rather than numeric column index.
+- **`ReadCSV`** - Read CSV files using row iteration or a callback.
+- **`ReadWorkbook`** - Read Excel worksheets using standard row iteration, with workbook-specific features such as worksheet selection.
+- **`EventExcelReader`** - Process `.xlsx` worksheets incrementally using event-driven parsing, particularly when working with large files.
+- **`NamedRowConsumer`** - Access selected worksheet columns by header name rather than numeric column index.
 
 ### Usage Examples
 
@@ -244,7 +244,7 @@ finally
 
 In this example:
 
-- **Resource management:** The workbook is opened using `open()` and closed explicitly using `close()`. When not using a try-with-resources statement, ensure that `close()` is called even if an exception occurs during processing.
+- **Resource management:** When not using a try-with-resources statement, ensure that `close()` is called even if an exception occurs during processing.
 - **Worksheet context:** `book.getWorksheetName()` returns the currently selected worksheet name.
 
 </details>        
@@ -273,6 +273,7 @@ try (ExcelReadable reader = new ReadWorkbook(excelFile, true, "Summary"))
         System.out.println(Arrays.toString(row));
     }
 }
+
 catch (TabularDataException exc)
 {
     System.err.printf("Workbook read error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
@@ -306,6 +307,7 @@ try (EventExcelReader reader = new EventExcelReader(largeFile, true))
         }
     });
 }
+
 catch (TabularDataException exc)
 {
     System.err.printf("Streaming error [%s]: %s%n", exc.getErrorCode(), exc.getMessage());
