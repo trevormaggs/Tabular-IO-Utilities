@@ -3,6 +3,7 @@ package io.writer;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
+import java.util.Locale;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import io.TabularDataException;
 
@@ -30,7 +31,7 @@ import io.TabularDataException;
  * @version 0.3
  * @since 26 October 2021
  */
-public class WriteWorkbookStreaming extends AbstractWorkbook
+public final class WriteWorkbookStreaming extends AbstractWorkbook
 {
     private boolean sharedStringsTable;
     private SXSSFWorkbook sxssfWorkbook;
@@ -196,7 +197,7 @@ public class WriteWorkbookStreaming extends AbstractWorkbook
     {
         String file = getFilePath().toString();
 
-        if (!file.endsWith(".xlsx"))
+        if (!file.toLowerCase(Locale.ROOT).endsWith(".xlsx"))
         {
             throw new TabularDataException("The file [" + file + "] does not appear to be in a valid XLSX format.");
         }
