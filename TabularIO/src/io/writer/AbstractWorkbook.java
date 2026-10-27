@@ -262,7 +262,7 @@ public abstract class AbstractWorkbook implements ExcelWritable
 
     /**
      * Processes an array of headers and writes them onto the worksheet at the current row location.
-     * Default styling includes bold 12-point text, top vertical alignment, and text wrapping.
+     * Default styling includes bold 12-point text and top vertical alignment.
      *
      * @param headers
      *        an array comprising header strings
@@ -283,7 +283,6 @@ public abstract class AbstractWorkbook implements ExcelWritable
         font.setFontHeightInPoints((short) 12);
 
         CellStyle style = workbook.createCellStyle();
-        style.setWrapText(true);
         style.setVerticalAlignment(VerticalAlignment.TOP);
         style.setFont(font);
 
@@ -356,6 +355,16 @@ public abstract class AbstractWorkbook implements ExcelWritable
         }
 
         addSheet();
+    }
+
+    /**
+     * Returns the row currently being populated.
+     *
+     * @return the current {@link Row} instance, or {@code null} if no row has been created
+     */
+    public Row getCurrentRow()
+    {
+        return currentRow;
     }
 
     /**
