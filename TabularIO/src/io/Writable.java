@@ -40,8 +40,9 @@ public interface Writable extends AutoCloseable
      *
      * @param word
      *        text value to insert
+     * @return zero-based index of the newly added cell
      */
-    void insertCell(String word);
+    int insertCell(String word);
 
     /**
      * Inserts a numeric value into the current row.
@@ -50,8 +51,9 @@ public interface Writable extends AutoCloseable
      *        type of numeric value
      * @param num
      *        numeric value to insert
+     * @return zero-based index of the newly added cell
      */
-    <T extends Number> void insertCell(T num);
+    <T extends Number> int insertCell(T num);
 
     /**
      * Writes the specified column headers to the output data.
@@ -70,7 +72,6 @@ public interface Writable extends AutoCloseable
      * @param entries
      *        array of content values
      * @throws TabularDataException
-     * 
      *         if the content cannot be written
      */
     void writeContent(String[] entries) throws TabularDataException;

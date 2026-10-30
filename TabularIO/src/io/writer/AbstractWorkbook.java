@@ -5,6 +5,8 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Locale;
+import java.util.Objects;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -46,7 +48,7 @@ public abstract class AbstractWorkbook implements ExcelWritable
 {
     private static final String DEFAULT_WORKSHEET_NAME = "Default";
     private String worksheetName = DEFAULT_WORKSHEET_NAME;
-    private Path filePath;
+    private final Path filePath;
     private int rowIndex;
     private int columnIndex;
     private Row currentRow;
@@ -76,6 +78,8 @@ public abstract class AbstractWorkbook implements ExcelWritable
      */
     public AbstractWorkbook(String file)
     {
+        Path tpath = null;
+
         if (file != null && !file.isEmpty())
         {
             Path fpath = Paths.get(file);
@@ -89,22 +93,24 @@ public abstract class AbstractWorkbook implements ExcelWritable
                 if (extPos >= 0)
                 {
                     Path parent = fpath.getParent();
-                    String normalised = nameStr.substring(0, extPos) + nameStr.substring(extPos).toLowerCase();
+                    String normalised = nameStr.substring(0, extPos) + nameStr.substring(extPos).toLowerCase(Locale.ROOT);
 
-                    filePath = (parent != null ? parent.resolve(normalised) : Paths.get(normalised));
+                    tpath = (parent != null ? parent.resolve(normalised) : Paths.get(normalised));
                 }
             }
 
             else
             {
-                filePath = fpath;
+                tpath = fpath;
             }
         }
 
         else
         {
-            filePath = Paths.get("out.xlsx");
+            tpath = Paths.get("out.xlsx");
         }
+
+        filePath = tpath;
     }
 
     /**
@@ -135,6 +141,7 @@ public abstract class AbstractWorkbook implements ExcelWritable
     public void createNewWorksheet(String tabName) throws TabularDataException
     {
         currentRow = null;
+        currentCell = null;
         rowIndex = 0;
         columnIndex = 0;
         worksheetName = tabName;
@@ -157,13 +164,13 @@ public abstract class AbstractWorkbook implements ExcelWritable
      * Adds an AutoFilter to the specified cell range of the current worksheet.
      *
      * @param firstRow
-     *        zero-based first row, inclusive
+     *        zero-based index of the first row, inclusive
      * @param firstCol
-     *        zero-based first column, inclusive
+     *        zero-based index of the first column, inclusive
      * @param lastRow
-     *        zero-based last row, inclusive
+     *        zero-based index of the last row, inclusive
      * @param lastCol
-     *        zero-based last column, inclusive
+     *        zero-based index of the last column, inclusive
      */
     @Override
     public void setAutoFilter(int firstRow, int firstCol, int lastRow, int lastCol)
@@ -233,11 +240,13 @@ public abstract class AbstractWorkbook implements ExcelWritable
      *
      * @param word
      *        the text value to insert
+     * @return the zero-based column index of the newly created cell
      */
     @Override
-    public void insertCell(String word)
+    public int insertCell(String word)
     {
         currentCell = createCell(word);
+        return currentCell.getColumnIndex();
     }
 
     /**
@@ -253,11 +262,13 @@ public abstract class AbstractWorkbook implements ExcelWritable
      *        the type extending {@link Number}
      * @param num
      *        the numeric value to insert, or {@code null} for a blank cell
+     * @return the zero-based column index of the newly created cell
      */
     @Override
-    public <T extends Number> void insertCell(T num)
+    public <T extends Number> int insertCell(T num)
     {
         currentCell = createCell(num);
+        return currentCell.getColumnIndex();
     }
 
     /**
@@ -273,6 +284,8 @@ public abstract class AbstractWorkbook implements ExcelWritable
     @Override
     public void writeHeader(String[] headers) throws TabularDataException
     {
+        Objects.requireNonNull(headers, "Header values cannot be null.");
+
         if (sheet == null)
         {
             throw new TabularDataException("Unable to write to worksheet [" + worksheetName + "]. Ensure the workbook is open first.");
@@ -307,6 +320,8 @@ public abstract class AbstractWorkbook implements ExcelWritable
     @Override
     public void writeContent(String[] entries) throws TabularDataException
     {
+        Objects.requireNonNull(entries, "Entry values cannot be null.");
+
         if (sheet == null)
         {
             throw new TabularDataException("Cannot write to worksheet [" + worksheetName + "]. Check the workbook is opened first.");
@@ -340,6 +355,11 @@ public abstract class AbstractWorkbook implements ExcelWritable
     @Override
     public void open() throws TabularDataException
     {
+        if (workbook != null)
+        {
+            throw new TabularDataException("Workbook is already open.");
+        }
+
         checkWorkbookExtensionName();
 
         String fileName = filePath.toString().toLowerCase();
@@ -354,7 +374,92 @@ public abstract class AbstractWorkbook implements ExcelWritable
             workbook = new XSSFWorkbook();
         }
 
-        addSheet();
+        try
+        {
+            addSheet();
+        }
+
+        catch (TabularDataException exc)
+        {
+            try
+            {
+                workbook.close();
+            }
+
+            catch (IOException closeExc)
+            {
+                exc.addSuppressed(closeExc);
+            }
+
+            finally
+            {
+                workbook = null;
+                sheet = null;
+            }
+
+            throw exc;
+        }
+    }
+
+    /**
+     * Writes the in-memory workbook to the configured output file and closes the workbook resource.
+     *
+     * @throws TabularDataException
+     *         if the workbook cannot be written to the output file
+     */
+    @Override
+    public void close() throws TabularDataException
+    {
+        Workbook currentWorkbook = workbook;
+        
+        if (currentWorkbook != null)
+        {
+            TabularDataException exc0 = null;
+
+            try (OutputStream fout = Files.newOutputStream(filePath))
+            {
+                currentWorkbook.write(fout);
+            }
+
+            catch (IOException exc1)
+            {
+                exc0 = new TabularDataException("Unable to write workbook to file [" + filePath + "]", exc1);
+                throw exc0;
+            }
+
+            finally
+            {
+                try
+                {
+                    currentWorkbook.close();
+                }
+
+                catch (IOException exc2)
+                {
+                    TabularDataException exc3 = new TabularDataException("Unable to close workbook [" + filePath + "]", exc2);
+
+                    if (exc0 != null)
+                    {
+                        exc0.addSuppressed(exc3);
+                    }
+
+                    else
+                    {
+                        throw exc3;
+                    }
+                }
+
+                finally
+                {
+                    workbook = null;
+                    sheet = null;
+                    currentRow = null;
+                    currentCell = null;
+                    rowIndex = 0;
+                    columnIndex = 0;
+                }
+            }
+        }
     }
 
     /**
@@ -370,52 +475,11 @@ public abstract class AbstractWorkbook implements ExcelWritable
     /**
      * Returns the cell currently being populated.
      *
-     * @return the current {@link Cell} instance
+     * @return the current {@link Cell} instance, or {@code null} if no cell has been created
      */
     public Cell getCurrentCell()
     {
         return currentCell;
-    }
-
-    /**
-     * Writes the in-memory workbook to the configured output file and closes the workbook resource.
-     *
-     * @throws TabularDataException
-     *         if the workbook cannot be written to the output file
-     */
-    @Override
-    public void close() throws TabularDataException
-    {
-        if (workbook != null)
-        {
-            try (OutputStream fout = Files.newOutputStream(filePath))
-            {
-                workbook.write(fout);
-            }
-
-            catch (IOException exc)
-            {
-                throw new TabularDataException("Unable to write workbook to file [" + filePath + "]", exc);
-            }
-
-            finally
-            {
-                try
-                {
-                    workbook.close();
-                }
-
-                catch (IOException exc)
-                {
-                    // Ignore close failure after the workbook has been written
-                }
-
-                finally
-                {
-                    workbook = null;
-                }
-            }
-        }
     }
 
     /**

@@ -182,6 +182,8 @@ public final class WriteWorkbookStreaming extends AbstractWorkbook
             finally
             {
                 sxssfWorkbook = null;
+                workbook = null;
+                sheet = null;
             }
         }
     }
@@ -218,6 +220,14 @@ public final class WriteWorkbookStreaming extends AbstractWorkbook
             throw new TabularDataException("Cannot add a new worksheet to spreadsheet [" + getFilePath() + "]. You must open the workbook first.");
         }
 
-        sheet = sxssfWorkbook.createSheet(getWorksheetName());
+        int suffix = 0;
+        String sheetName = getWorksheetName();
+
+        while (sxssfWorkbook.getSheet(sheetName) != null)
+        {
+            sheetName = String.format("%s_%d", getWorksheetName(), ++suffix);
+        }
+
+        sheet = sxssfWorkbook.createSheet(sheetName);
     }
 }

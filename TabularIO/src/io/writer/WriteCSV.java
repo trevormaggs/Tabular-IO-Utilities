@@ -139,15 +139,17 @@ public class WriteCSV implements Writable
      *
      * @param word
      *        string value to add to the current row
+     * @return the positional index of where the newly cell is added
      */
     @Override
-    public void insertCell(String word)
+    public int insertCell(String word)
     {
         if (csvData.isEmpty())
         {
             addRow();
         }
 
+        int cellPosition = colCounter;
         List<String> csvLine = csvData.get(csvData.size() - 1);
 
         csvLine.add(word);
@@ -157,6 +159,8 @@ public class WriteCSV implements Writable
         {
             maxColCount = colCounter;
         }
+
+        return cellPosition;
     }
 
     /**
@@ -170,11 +174,12 @@ public class WriteCSV implements Writable
      *        numeric value to add to the current row
      * @param <T>
      *        numeric type
+     * @return the positional index of where the newly cell is added
      */
     @Override
-    public <T extends Number> void insertCell(T num)
+    public <T extends Number> int insertCell(T num)
     {
-        insertCell(num != null ? num.toString() : "");
+        return insertCell(num != null ? num.toString() : "");
     }
 
     /**
@@ -229,6 +234,11 @@ public class WriteCSV implements Writable
             throw new TabularDataException("The file [" + filePath + "] does not appear to be a valid CSV file.");
         }
 
+        if (csvWriter != null)
+        {
+            throw new TabularDataException("CSV file is already open.");
+        }
+
         try
         {
             csvWriter = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8);
@@ -243,9 +253,17 @@ public class WriteCSV implements Writable
     @Override
     public void close() throws TabularDataException
     {
+        TabularDataException exc0 = null;
+
         try
         {
             writeBufferedData();
+        }
+
+        catch (TabularDataException exc1)
+        {
+            exc0 = exc1;
+            throw exc1;
         }
 
         finally
@@ -254,13 +272,27 @@ public class WriteCSV implements Writable
             {
                 try
                 {
-                    csvWriter.flush();
                     csvWriter.close();
                 }
 
-                catch (IOException exc)
+                catch (IOException exc2)
                 {
-                    throw new TabularDataException(ErrorCode.STREAM_WRITE_FAILED, "Problem while attempting to close CSV file [" + filePath + "]", exc);
+                    TabularDataException exc3 = new TabularDataException(ErrorCode.STREAM_WRITE_FAILED, "Problem while attempting to close CSV file [" + filePath + "]", exc2);
+
+                    if (exc0 != null)
+                    {
+                        exc0.addSuppressed(exc3);
+                    }
+
+                    else
+                    {
+                        throw exc3;
+                    }
+                }
+
+                finally
+                {
+                    csvWriter = null;
                 }
             }
         }

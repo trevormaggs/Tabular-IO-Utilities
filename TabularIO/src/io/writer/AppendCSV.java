@@ -8,10 +8,10 @@ import io.TabularDataException;
 import io.TabularDataException.ErrorCode;
 
 /**
- * Updates a specified CSV file by appending new row data rather than overwriting existing content.
+ * Writes additional rows to an existing CSV file without overwriting its contents.
  * 
  * <p>
- * <b>Change logs:</b>
+ * <b>Change log:</b>
  * </p>
  * 
  * <ul>
@@ -30,7 +30,7 @@ public class AppendCSV extends WriteCSV
      * @param file
      *        relative or absolute file path
      */
-    public AppendCSV(final String file)
+    public AppendCSV(String file)
     {
         super(file);
     }
@@ -44,6 +44,16 @@ public class AppendCSV extends WriteCSV
     @Override
     public void open() throws TabularDataException
     {
+        if (!filePath.toString().endsWith(".csv"))
+        {
+            throw new TabularDataException("The file [" + filePath + "] does not appear to be a valid CSV file.");
+        }
+
+        if (csvWriter != null)
+        {
+            throw new TabularDataException("CSV file is already open.");
+        }
+
         try
         {
             csvWriter = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
