@@ -47,14 +47,14 @@ import io.style.ColourStyle;
 public abstract class AbstractWorkbook implements ExcelWritable
 {
     private static final String DEFAULT_WORKSHEET_NAME = "Default";
-    private String worksheetName = DEFAULT_WORKSHEET_NAME;
     private final Path filePath;
     private int rowIndex;
     private int columnIndex;
     private Row currentRow;
     private Cell currentCell;
-    protected Workbook workbook;
+    private String worksheetName = DEFAULT_WORKSHEET_NAME;
     protected Sheet sheet;
+    protected Workbook workbook;
 
     /**
      * Creates an instance configured to produce a new XLSX workbook using {@code out.xlsx} as the
@@ -379,16 +379,16 @@ public abstract class AbstractWorkbook implements ExcelWritable
             addSheet();
         }
 
-        catch (TabularDataException exc)
+        catch (TabularDataException exc0)
         {
             try
             {
                 workbook.close();
             }
 
-            catch (IOException closeExc)
+            catch (IOException exc1)
             {
-                exc.addSuppressed(closeExc);
+                exc0.addSuppressed(exc1);
             }
 
             finally
@@ -397,7 +397,7 @@ public abstract class AbstractWorkbook implements ExcelWritable
                 sheet = null;
             }
 
-            throw exc;
+            throw exc0;
         }
     }
 
@@ -411,7 +411,7 @@ public abstract class AbstractWorkbook implements ExcelWritable
     public void close() throws TabularDataException
     {
         Workbook currentWorkbook = workbook;
-        
+
         if (currentWorkbook != null)
         {
             TabularDataException exc0 = null;
@@ -460,6 +460,16 @@ public abstract class AbstractWorkbook implements ExcelWritable
                 }
             }
         }
+    }
+
+    /**
+     * Returns the underlying Apache POI workbook.
+     *
+     * @return the workbook, or {@code null} if the workbook has not been opened
+     */
+    public Workbook getWorkbook()
+    {
+        return workbook;
     }
 
     /**
