@@ -493,6 +493,43 @@ public abstract class AbstractWorkbook implements ExcelWritable
     }
 
     /**
+     * Merges the specified range of cells in the worksheet containing the supplied cell.
+     *
+     * @param cell
+     *        the origin cell identifying the workshee. It must not be {@code null}
+     * @param r1
+     *        the zero-based index of the first row, inclusive
+     * @param r2
+     *        the zero-based index of the last row, inclusive
+     * @param c1
+     *        the zero-based index of the first column, inclusive
+     * @param c2
+     *        the zero-based index of the last column, inclusive
+     * 
+     * @throws NullPointerException
+     *         if {@code cell} is {@code null}
+     * @throws IllegalArgumentException
+     *         if the starting row or column index is negative, or either starting index exceeds its
+     *         corresponding ending index
+     */
+    public void mergeCells(Cell cell, int r1, int r2, int c1, int c2)
+    {
+        Objects.requireNonNull(cell, "Cell cannot be null for merging.");
+
+        if (r1 < 0 || c1 < 0 || r1 > r2 || c1 > c2)
+        {
+            throw new IllegalArgumentException(String.format("Invalid merge coordinates: r1=%d, r2=%d, c1=%d, c2=%d.", r1, r2, c1, c2));
+        }
+
+        cell.getSheet().addMergedRegion(new CellRangeAddress(r1, r2, c1, c2));
+
+        if (currentRow != null && currentRow.getRowNum() >= r1 && currentRow.getRowNum() <= r2 && columnIndex >= c1 && columnIndex <= c2)
+        {
+            columnIndex = c2 + 1;
+        }
+    }
+
+    /**
      * Helper method to create a string cell at the current row position and advance column index.
      *
      * @param word
