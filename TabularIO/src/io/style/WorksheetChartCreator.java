@@ -1,5 +1,8 @@
 package io.style;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.ss.usermodel.ShapeTypes;
 import org.apache.poi.xddf.usermodel.XDDFColor;
@@ -233,7 +236,7 @@ public final class WorksheetChartCreator
 
         return chart;
     }
-    
+
     // TODO: Add Javadoc
     private static void setBarScaleLogBase(XDDFValueAxis valueAxis, int base)
     {
@@ -426,105 +429,265 @@ public final class WorksheetChartCreator
     {
         ConfiguredLegendData legendData = config.getLegendData();
 
-        if (legendData == null || legendData.getEntries().isEmpty())
+        if (legendData != null && !legendData.getEntries().isEmpty())
         {
-            return;
-        }
+            List<double[]> seriesPercentages = new ArrayList<double[]>();
+            CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
 
-        CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
-
-        for (CTPieSer series : doughnutChart.getSerArray())
-        {
-            if (series.isSetDLbls())
+            for (CTPieSer series : doughnutChart.getSerArray())
             {
-                series.unsetDLbls();
-            }
-        }
+                CTNumDataSource valueSource = series.getVal();
 
-        if (chart.getCTChart().isSetLegend())
-        {
-            chart.getCTChart().unsetLegend();
-        }
-
-        int rowOffset = 0;
-        int startCol = config.getFromCol() + 5;
-        int startRow = config.getFromRow() + 6;
-
-        for (ConfiguredLegendData.LegendEntry entry : legendData.getEntries())
-        {
-            byte[] rgb = entry.getRgbBytes();
-            int row = startRow + (rowOffset * 2);
-
-            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
-            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
-
-            colourSquare.setShapeType(ShapeTypes.RECT);
-
-            if (rgb != null && rgb.length == 3)
-            {
-                colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
-                colourSquare.setLineStyleColor(0, 0, 0);
-            }
-
-            // Category label
-            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
-            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
-
-            labelBox.setText(entry.getLabel());
-
-            // Percentage
-            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, startCol + 2, row, startCol + 3, row + 1);
-            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
-
-            percentageBox.setText(entry.getPercentageText());
-            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
-
-            rowOffset++;
-        }
-
-        for (CTPieSer series : doughnutChart.getSerArray())
-        {
-            for (int i = 0; i < legendData.getEntries().size(); i++)
-            {
-                ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
-
-                byte[] rgb = entry.getRgbBytes();
-
-                if (rgb == null || rgb.length != 3)
+                if (!valueSource.isSetNumLit())
                 {
                     continue;
                 }
 
-                CTDPt dataPoint = series.addNewDPt();
+                int index = 0;
+                CTNumData values = valueSource.getNumLit();
+                double[] percentages = new double[values.sizeOfPtArray()];
+                double total = 0.0;
 
-                dataPoint.addNewIdx().setVal(i);
-                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+                for (CTNumVal point : values.getPtArray())
+                {
+                    total += Double.parseDouble(point.getV());
+                }
+
+                for (CTNumVal point : values.getPtArray())
+                {
+                    double value = Double.parseDouble(point.getV());
+
+                    percentages[index++] = (total == 0.0 ? 0.0 : value / total * 100.0);
+                }
+
+                seriesPercentages.add(percentages);
+
+                if (series.isSetDLbls())
+                {
+                    series.unsetDLbls();
+                }
+
+                for (int i = 0; i < legendData.getEntries().size(); i++)
+                {
+                    ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
+
+                    byte[] rgb = entry.getRgbBytes();
+
+                    if (rgb == null || rgb.length != 3)
+                    {
+                        continue;
+                    }
+
+                    CTDPt dataPoint = series.addNewDPt();
+
+                    dataPoint.addNewIdx().setVal(i);
+                    dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+                }
             }
+
+            if (seriesPercentages.isEmpty())
+            {
+                return;
+            }
+
+            if (chart.getCTChart().isSetLegend())
+            {
+                chart.getCTChart().unsetLegend();
+            }
+
+            int startCol = config.getFromCol() + 5;
+            int startRow = config.getFromRow() + 6;
+
+            for (int i = 0; i < legendData.getEntries().size(); i++)
+            {
+                ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
+
+                int row = startRow + (i * 2);
+                byte[] rgb = entry.getRgbBytes();
+
+                // Colour square
+                XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
+                XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+
+                colourSquare.setShapeType(ShapeTypes.RECT);
+
+                if (rgb != null && rgb.length == 3)
+                {
+                    colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
+                    colourSquare.setLineStyleColor(0, 0, 0);
+                }
+
+                // Category label
+                XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
+                XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+
+                labelBox.setText(entry.getLabel());
+
+                // Percentage columns, one for each doughnut series
+                for (int seriesIndex = 0; seriesIndex < seriesPercentages.size(); seriesIndex++)
+                {
+                    double[] percentages = seriesPercentages.get(seriesIndex);
+
+                    if (i >= percentages.length)
+                    {
+                        continue;
+                    }
+
+                    int percentageCol = startCol + 2 + seriesIndex;
+
+                    XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentageCol, row, percentageCol + 1, row + 1);
+                    XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+                    percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percentages[i]));
+                    percentageBox.setTextDirection(TextDirection.HORIZONTAL);
+                }
+            }
+
+            CTPlotArea plotArea = chart.getCTChart().getPlotArea();
+            CTLayout layout = plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout();
+
+            /*
+             * From raw chart.xml
+             *
+             * <c:manualLayout>
+             * <c:layoutTarget val="inner"/>
+             * <c:xMode val="edge"/>
+             * <c:yMode val="edge"/>
+             * <c:x val="5.4404117454068243E-2"/>
+             * <c:y val="0.1295334645669291"/>
+             * <c:w val="0.49714587434383201"/>
+             * <c:h val="0.79543339895013121"/>
+             * </c:manualLayout>
+             */
+
+            CTManualLayout manualLayout = layout.addNewManualLayout();
+
+            manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
+            manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
+            manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
+            manualLayout.addNewX().setVal(0.054404117454068243);
+            manualLayout.addNewY().setVal(0.1295334645669291);
+            manualLayout.addNewW().setVal(0.49714587434383201);
+            manualLayout.addNewH().setVal(0.79543339895013121);
         }
+    }
 
-        CTPlotArea plotArea = chart.getCTChart().getPlotArea();
-        CTLayout layout = (plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout());
+    private void addCustomLegend3(XSSFChart chart, ConfiguredChartData config)
+    {
+        ConfiguredLegendData legendData = config.getLegendData();
 
-        /*
-         * From raw chart.xml
-         * <c:manualLayout>
-         * <c:layoutTarget val="inner"/>
-         * <c:xMode val="edge"/>
-         * <c:yMode val="edge"/>
-         * <c:x val="5.4404117454068243E-2"/>
-         * <c:y val="0.1295334645669291"/>
-         * <c:w val="0.49714587434383201"/>
-         * <c:h val="0.79543339895013121"/>
-         * </c:manualLayout>
-         */
-        CTManualLayout manualLayout = layout.addNewManualLayout();
+        if (legendData != null && !legendData.getEntries().isEmpty())
+        {
+            CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
 
-        manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
-        manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
-        manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
-        manualLayout.addNewX().setVal(0.054404117454068243);
-        manualLayout.addNewY().setVal(0.1295334645669291);
-        manualLayout.addNewW().setVal(0.49714587434383201);
-        manualLayout.addNewH().setVal(0.79543339895013121);
+            for (CTPieSer series : doughnutChart.getSerArray())
+            {
+                CTNumDataSource valueSource = series.getVal();
+                CTNumData values = valueSource.getNumLit();
+                double[] percentages = new double[values.sizeOfPtArray()];
+                int index = 0;
+
+                double total = 0.0;
+
+                for (CTNumVal point : values.getPtArray())
+                {
+                    total += Double.parseDouble(point.getV());
+                }
+
+                for (CTNumVal point : values.getPtArray())
+                {
+                    double value = Double.parseDouble(point.getV());
+                    percentages[index++] = total == 0.0 ? 0.0 : value / total * 100.0;
+                    System.out.printf("LOOK: %s\n", percentages[index - 1]);
+                }
+
+                if (series.isSetDLbls())
+                {
+                    series.unsetDLbls();
+                }
+
+                for (int i = 0; i < legendData.getEntries().size(); i++)
+                {
+                    ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
+
+                    byte[] rgb = entry.getRgbBytes();
+
+                    if (rgb == null || rgb.length != 3)
+                    {
+                        continue;
+                    }
+
+                    CTDPt dataPoint = series.addNewDPt();
+
+                    dataPoint.addNewIdx().setVal(i);
+                    dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+                }
+            }
+
+            if (chart.getCTChart().isSetLegend())
+            {
+                chart.getCTChart().unsetLegend();
+            }
+
+            int rowOffset = 0;
+            int startCol = config.getFromCol() + 5;
+            int startRow = config.getFromRow() + 6;
+
+            for (ConfiguredLegendData.LegendEntry entry : legendData.getEntries())
+            {
+                byte[] rgb = entry.getRgbBytes();
+                int row = startRow + (rowOffset * 2);
+
+                XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
+                XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+
+                colourSquare.setShapeType(ShapeTypes.RECT);
+
+                if (rgb != null && rgb.length == 3)
+                {
+                    colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
+                    colourSquare.setLineStyleColor(0, 0, 0);
+                }
+
+                // Category label
+                XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
+                XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+
+                labelBox.setText(entry.getLabel());
+
+                // Percentage
+                XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, startCol + 2, row, startCol + 3, row + 1);
+                XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+
+                percentageBox.setText(entry.getPercentageText());
+                percentageBox.setTextDirection(TextDirection.HORIZONTAL);
+
+                rowOffset++;
+            }
+
+            CTPlotArea plotArea = chart.getCTChart().getPlotArea();
+            CTLayout layout = (plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout());
+
+            /*
+             * From raw chart.xml
+             * <c:manualLayout>
+             * <c:layoutTarget val="inner"/>
+             * <c:xMode val="edge"/>
+             * <c:yMode val="edge"/>
+             * <c:x val="5.4404117454068243E-2"/>
+             * <c:y val="0.1295334645669291"/>
+             * <c:w val="0.49714587434383201"/>
+             * <c:h val="0.79543339895013121"/>
+             * </c:manualLayout>
+             */
+            CTManualLayout manualLayout = layout.addNewManualLayout();
+
+            manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
+            manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
+            manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
+            manualLayout.addNewX().setVal(0.054404117454068243);
+            manualLayout.addNewY().setVal(0.1295334645669291);
+            manualLayout.addNewW().setVal(0.49714587434383201);
+            manualLayout.addNewH().setVal(0.79543339895013121);
+        }
     }
 }
