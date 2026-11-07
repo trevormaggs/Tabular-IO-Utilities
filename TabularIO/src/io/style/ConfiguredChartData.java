@@ -35,6 +35,7 @@ public final class ConfiguredChartData
     private final int toRow;
     private final BarDirection barDirection;
     private final byte[] rgbChartFillBytes;
+    private final ConfiguredLegendData legendData;
 
     /**
      * Constructs a fully initialised chart configuration from the specified builder.
@@ -48,7 +49,7 @@ public final class ConfiguredChartData
      * @throws NullPointerException
      *         if {@code builder} or its chart type is {@code null}
      */
-    public ConfiguredChartData(Builder builder)
+    private ConfiguredChartData(Builder builder)
     {
         Objects.requireNonNull(builder, "Builder must not be null");
 
@@ -65,6 +66,7 @@ public final class ConfiguredChartData
         this.toRow = builder.bd_toRow;
         this.barDirection = builder.bd_barDirection;
         this.rgbChartFillBytes = (builder.bd_rgbFillBytes != null ? builder.bd_rgbFillBytes.clone() : null);
+        this.legendData = builder.bd_legendData;
     }
 
     /**
@@ -199,6 +201,11 @@ public final class ConfiguredChartData
         return (rgbChartFillBytes != null ? rgbChartFillBytes.clone() : null);
     }
 
+    public ConfiguredLegendData getLegendData()
+    {
+        return legendData;
+    }
+
     /**
      * Builder for constructing {@link ConfiguredChartData} instances.
      * 
@@ -221,6 +228,7 @@ public final class ConfiguredChartData
         private int bd_toRow;
         private BarDirection bd_barDirection;
         private byte[] bd_rgbFillBytes;
+        private ConfiguredLegendData bd_legendData;
 
         /**
          * Creates a builder for the specified chart type.
@@ -465,6 +473,19 @@ public final class ConfiguredChartData
                 bd_rgbFillBytes = HexByteConversion.decode(h.trim());
             }
 
+            return this;
+        }
+
+        /**
+         * Sets the custom worksheet legend configuration.
+         *
+         * @param legendData
+         *        the legend configuration, or null if no custom legend is required
+         * @return this builder instance for method chaining
+         */
+        public Builder legend(ConfiguredLegendData legendData)
+        {
+            this.bd_legendData = legendData;
             return this;
         }
 

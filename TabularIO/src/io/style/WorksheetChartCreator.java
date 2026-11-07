@@ -1,43 +1,29 @@
 package io.style;
 
 import java.util.Objects;
+import org.apache.poi.ss.usermodel.ShapeTypes;
 import org.apache.poi.xddf.usermodel.XDDFColor;
 import org.apache.poi.xddf.usermodel.XDDFShapeProperties;
 import org.apache.poi.xddf.usermodel.XDDFSolidFillProperties;
-import org.apache.poi.xddf.usermodel.chart.AxisCrossBetween;
-import org.apache.poi.xddf.usermodel.chart.AxisCrosses;
-import org.apache.poi.xddf.usermodel.chart.AxisPosition;
-import org.apache.poi.xddf.usermodel.chart.BarGrouping;
-import org.apache.poi.xddf.usermodel.chart.ChartTypes;
-import org.apache.poi.xddf.usermodel.chart.LegendPosition;
-import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
-import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
-import org.apache.poi.xddf.usermodel.chart.XDDFDoughnutChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
+import org.apache.poi.xddf.usermodel.chart.*;
+import org.apache.poi.xssf.usermodel.TextDirection;
 import org.apache.poi.xssf.usermodel.XSSFChart;
 import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
 import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarChart;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbls;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDoughnutChart;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTLegend;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTPieSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STDLblPos;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
+import org.apache.poi.xssf.usermodel.XSSFSimpleShape;
+import org.apache.poi.xssf.usermodel.XSSFTextBox;
+import org.openxmlformats.schemas.drawingml.x2006.chart.*;
+import org.openxmlformats.schemas.drawingml.x2006.main.*;
 import io.TabularDataException;
 
 /**
+ * Creates and configures charts on an Excel worksheet using Apache POI.
+ *
+ * <p>
+ * Supports multiple chart types, configurable axes, chart titles, legends and data labels. Custom
+ * doughnut chart legends are rendered using worksheet drawing objects.
+ * </p>
  *
  * <b>Change log:</b>
  * <ul>
@@ -57,6 +43,21 @@ public final class WorksheetChartCreator
     private AxisPosition xAxis;
     private AxisPosition yAxis;
 
+    /**
+     * Creates a chart creator for the specified worksheet.
+     *
+     * <p>
+     * Initialises the worksheet drawing patriarch and the default axis positions.
+     * </p>
+     *
+     * @param sheet
+     *        the worksheet on which charts will be created
+     * 
+     * @throws NullPointerException
+     *         if {@code sheet} is {@code null}
+     * @throws TabularDataException
+     *         if the worksheet drawing patriarch cannot be created
+     */
     public WorksheetChartCreator(XSSFSheet sheet) throws TabularDataException
     {
         this.xssfSheet = Objects.requireNonNull(sheet, "Worksheet must not be null");
@@ -65,21 +66,59 @@ public final class WorksheetChartCreator
         this.yAxis = DEFAULT_YAXIS;
     }
 
+    /**
+     * Returns the worksheet associated with this chart creator.
+     *
+     * @return the associated worksheet
+     */
     public XSSFSheet getXssfSheet()
     {
         return xssfSheet;
     }
 
+    /**
+     * Overrides the default horizontal axis position for subsequently created charts.
+     *
+     * @param axis
+     *        the new horizontal axis position
+     * 
+     * @throws NullPointerException
+     *         if {@code axis} is {@code null}
+     */
     public void overrideDefaultXAxis(AxisPosition axis)
     {
         xAxis = Objects.requireNonNull(axis, "X-axis position must not be null");
     }
 
+    /**
+     * Overrides the default vertical axis position for subsequently created charts.
+     *
+     * @param axis
+     *        the new vertical axis position
+     * 
+     * @throws NullPointerException
+     *         if {@code axis} is {@code null}
+     */
     public void overrideDefaultYAxis(AxisPosition axis)
     {
         yAxis = Objects.requireNonNull(axis, "Y-axis position must not be null");
     }
 
+    /**
+     * Creates and renders the configured charts on the associated worksheet.
+     *
+     * <p>
+     * Each configuration defines the chart type, data series, formatting and worksheet placement.
+     * </p>
+     *
+     * @param configs
+     *        the chart configurations to render
+     * 
+     * @throws NullPointerException
+     *         if {@code configs} is {@code null}
+     * @throws TabularDataException
+     *         if a chart cannot be created or rendered
+     */
     public void renderChart(ConfiguredChartData[] configs) throws TabularDataException
     {
         Objects.requireNonNull(configs, "Configurations cannot be null.");
@@ -161,11 +200,21 @@ public final class WorksheetChartCreator
 
             else if (data instanceof XDDFDoughnutChartData)
             {
-                addDoughnutDataLabels(chart);
+                addCustomLegend(chart, config);
             }
         }
     }
 
+    /**
+     * Creates a chart on the associated worksheet using the supplied configuration.
+     *
+     * @param config
+     *        the chart configuration
+     * @return the newly created chart
+     * 
+     * @throws TabularDataException
+     *         if {@code config} is {@code null}
+     */
     public XSSFChart renderChart(ConfiguredChartData config) throws TabularDataException
     {
         if (config == null)
@@ -184,7 +233,8 @@ public final class WorksheetChartCreator
 
         return chart;
     }
-
+    
+    // TODO: Add Javadoc
     private static void setBarScaleLogBase(XDDFValueAxis valueAxis, int base)
     {
         if (base > 1)
@@ -194,6 +244,7 @@ public final class WorksheetChartCreator
         }
     }
 
+    // TODO: Add Javadoc
     private static void configureBarChart(XDDFBarChartData barData, XDDFValueAxis valueAxis, ConfiguredChartData config)
     {
         barData.setBarDirection(config.getBarDirection());
@@ -204,6 +255,7 @@ public final class WorksheetChartCreator
         setBarScaleLogBase(valueAxis, config.getBarScaleLogBase());
     }
 
+    // TODO: Add Javadoc
     private static void configureDoughnutChart(XDDFDoughnutChartData doughnutData)
     {
         doughnutData.setVaryColors(true);
@@ -214,9 +266,8 @@ public final class WorksheetChartCreator
      * Configures the font size and optional font colour of a chart title.
      *
      * <p>
-     * The title formatting properties are obtained from the supplied chart configuration.
-     * The font size is applied to the title paragraphs and their text runs. If an RGB
-     * colour is supplied, it is applied to the title text.
+     * Title formatting is applied only when a positive font size is specified. If an RGB colour is
+     * supplied, it is applied alongside the font size.
      * </p>
      *
      * @param chart
@@ -340,6 +391,7 @@ public final class WorksheetChartCreator
         }
     }
 
+    // TODO: Add Javadoc
     private static void addDataLabels(XSSFChart chart)
     {
         CTBarChart barChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
@@ -356,19 +408,123 @@ public final class WorksheetChartCreator
         }
     }
 
-    private void addDoughnutDataLabels(XSSFChart chart)
+    /**
+     * Adds a custom legend to a doughnut chart.
+     *
+     * <p>
+     * Creates coloured swatches, category labels and calculated percentages using worksheet drawing
+     * objects. Also applies the configured colours to the doughnut chart slices and adjusts the
+     * plot area to accommodate the custom legend.
+     * </p>
+     *
+     * @param chart
+     *        the doughnut chart to configure
+     * @param config
+     *        the chart configuration containing the legend entries
+     */
+    private void addCustomLegend(XSSFChart chart, ConfiguredChartData config)
     {
-        CTDoughnutChart doughnutChart =
-                chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
+        ConfiguredLegendData legendData = config.getLegendData();
+
+        if (legendData == null || legendData.getEntries().isEmpty())
+        {
+            return;
+        }
+
+        CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
 
         for (CTPieSer series : doughnutChart.getSerArray())
         {
-            CTDLbls dataLabels = series.addNewDLbls();
-
-            dataLabels.addNewShowPercent().setVal(true);
-            dataLabels.addNewShowCatName().setVal(true);
-
-            series.addNewDLbls().addNewShowLeaderLines().setVal(true);
+            if (series.isSetDLbls())
+            {
+                series.unsetDLbls();
+            }
         }
+
+        if (chart.getCTChart().isSetLegend())
+        {
+            chart.getCTChart().unsetLegend();
+        }
+
+        int rowOffset = 0;
+        int startCol = config.getFromCol() + 5;
+        int startRow = config.getFromRow() + 6;
+
+        for (ConfiguredLegendData.LegendEntry entry : legendData.getEntries())
+        {
+            byte[] rgb = entry.getRgbBytes();
+            int row = startRow + (rowOffset * 2);
+
+            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
+            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+
+            colourSquare.setShapeType(ShapeTypes.RECT);
+
+            if (rgb != null && rgb.length == 3)
+            {
+                colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
+                colourSquare.setLineStyleColor(0, 0, 0);
+            }
+
+            // Category label
+            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
+            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+
+            labelBox.setText(entry.getLabel());
+
+            // Percentage
+            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, startCol + 2, row, startCol + 3, row + 1);
+            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+
+            percentageBox.setText(entry.getPercentageText());
+            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
+
+            rowOffset++;
+        }
+
+        for (CTPieSer series : doughnutChart.getSerArray())
+        {
+            for (int i = 0; i < legendData.getEntries().size(); i++)
+            {
+                ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
+
+                byte[] rgb = entry.getRgbBytes();
+
+                if (rgb == null || rgb.length != 3)
+                {
+                    continue;
+                }
+
+                CTDPt dataPoint = series.addNewDPt();
+
+                dataPoint.addNewIdx().setVal(i);
+                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+            }
+        }
+
+        CTPlotArea plotArea = chart.getCTChart().getPlotArea();
+        CTLayout layout = (plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout());
+
+        /*
+         * From raw chart.xml
+         * <c:manualLayout>
+         * <c:layoutTarget val="inner"/>
+         * <c:xMode val="edge"/>
+         * <c:yMode val="edge"/>
+         * <c:x val="5.4404117454068243E-2"/>
+         * <c:y val="0.1295334645669291"/>
+         * <c:w val="0.49714587434383201"/>
+         * <c:h val="0.79543339895013121"/>
+         * </c:manualLayout>
+         */
+        CTManualLayout manualLayout = layout.addNewManualLayout();
+
+        manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
+        manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
+        manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
+        manualLayout.addNewX().setVal(0.054404117454068243);
+        manualLayout.addNewY().setVal(0.1295334645669291);
+        manualLayout.addNewW().setVal(0.49714587434383201);
+        manualLayout.addNewH().setVal(0.79543339895013121);
     }
 }
