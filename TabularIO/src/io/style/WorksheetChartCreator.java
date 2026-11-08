@@ -19,13 +19,14 @@ import org.apache.poi.xssf.usermodel.XSSFTextBox;
 import org.openxmlformats.schemas.drawingml.x2006.chart.*;
 import org.openxmlformats.schemas.drawingml.x2006.main.*;
 import io.TabularDataException;
+import io.style.ConfiguredChartData.ChartDataPoint;
 
 /**
  * Creates and configures charts on an Excel worksheet using Apache POI.
  *
  * <p>
  * Supports multiple chart types, configurable axes, chart titles, legends and data labels. Custom
- * doughnut chart legends are rendered using worksheet drawing objects.
+ * pie based chart legends are rendered using worksheet drawing objects.
  * </p>
  *
  * <b>Change log:</b>
@@ -55,7 +56,7 @@ public final class WorksheetChartCreator
      *
      * @param sheet
      *        the worksheet on which charts will be created
-     * 
+     *
      * @throws NullPointerException
      *         if {@code sheet} is {@code null}
      * @throws TabularDataException
@@ -84,7 +85,7 @@ public final class WorksheetChartCreator
      *
      * @param axis
      *        the new horizontal axis position
-     * 
+     *
      * @throws NullPointerException
      *         if {@code axis} is {@code null}
      */
@@ -98,7 +99,7 @@ public final class WorksheetChartCreator
      *
      * @param axis
      *        the new vertical axis position
-     * 
+     *
      * @throws NullPointerException
      *         if {@code axis} is {@code null}
      */
@@ -108,19 +109,14 @@ public final class WorksheetChartCreator
     }
 
     /**
-     * Creates and renders the configured charts on the associated worksheet.
-     *
-     * <p>
-     * Each configuration defines the chart type, data series, formatting and worksheet placement.
-     * </p>
+     * Creates and renders multiple configured charts on the associated worksheet.
      *
      * @param configs
-     *        the chart configurations to render
-     * 
+     *        the array of chart configurations to render
      * @throws NullPointerException
      *         if {@code configs} is {@code null}
      * @throws TabularDataException
-     *         if a chart cannot be created or rendered
+     *         if any chart cannot be created or rendered
      */
     public void renderChart(ConfiguredChartData[] configs) throws TabularDataException
     {
@@ -128,92 +124,16 @@ public final class WorksheetChartCreator
 
         for (ConfiguredChartData config : configs)
         {
-            XDDFChartData data;
-            XSSFChart chart = renderChart(config);
-            ChartTypes type = config.getChartType();
-            XDDFCategoryAxis categoryAxis = null;
-            XDDFValueAxis valueAxis = null;
-
-            switch (type)
-            {
-                case PIE:
-                case PIE3D:
-                case DOUGHNUT:
-
-                    data = chart.createData(type, null, null);
-
-                    if (data instanceof XDDFDoughnutChartData)
-                    {
-                        configureDoughnutChart((XDDFDoughnutChartData) data);
-                    }
-
-                break;
-
-                default:
-                    categoryAxis = chart.createCategoryAxis(xAxis);
-                    valueAxis = chart.createValueAxis(yAxis);
-                    categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                    valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                    valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
-                    data = chart.createData(type, categoryAxis, valueAxis);
-
-                    if (data instanceof XDDFBarChartData)
-                    {
-                        configureBarChart((XDDFBarChartData) data, valueAxis, config);
-                    }
-
-                    else
-                    {
-                        // TODO add more for other chart types later
-                    }
-            }
-
-            configureChartTitle(chart, config);
-            configureChartLegend(chart, config);
-
-            for (ConfiguredChartData.ChartSeries chartSeries : config.getSeries())
-            {
-                XDDFCategoryDataSource categories = XDDFDataSourcesFactory.fromArray(chartSeries.getCategories());
-                XDDFNumericalDataSource<? extends Number> values = XDDFDataSourcesFactory.fromArray(chartSeries.getValues());
-                XDDFChartData.Series series = data.addSeries(categories, values);
-
-                series.setTitle(chartSeries.getLegend(), null);
-
-                if (!(data instanceof XDDFDoughnutChartData))
-                {
-                    byte[] rgbFillBytes = config.getRgbFillBytes();
-
-                    if (rgbFillBytes != null)
-                    {
-                        XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
-                        XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
-
-                        shapeProperties.setFillProperties(fill);
-                        series.setShapeProperties(shapeProperties);
-                    }
-                }
-            }
-
-            chart.plot(data);
-
-            if (data instanceof XDDFBarChartData)
-            {
-                addDataLabels(chart);
-            }
-
-            else if (data instanceof XDDFDoughnutChartData)
-            {
-                addCustomLegend(chart, config);
-            }
+            renderChart(config);
         }
     }
 
     /**
-     * Creates a chart on the associated worksheet using the supplied configuration.
+     * Renders a single chart on the associated worksheet using the specified configuration.
      *
      * @param config
      *        the chart configuration
-     * @return the newly created chart
+     * @return the newly rendered chart
      * 
      * @throws TabularDataException
      *         if {@code config} is {@code null}
@@ -222,9 +142,14 @@ public final class WorksheetChartCreator
     {
         if (config == null)
         {
-            throw new TabularDataException("Unable to create a new chart. Check the original array for null chart entries");
+            throw new TabularDataException("Unable to create a new chart. Check the configuration entry for null values.");
         }
 
+        boolean isPieBased = false;
+        ChartTypes type = config.getChartType();
+        XDDFCategoryAxis categoryAxis = null;
+        XDDFValueAxis valueAxis = null;
+        XDDFChartData data;
         XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
         XSSFChart chart = xssfDrawing.createChart(anchor);
 
@@ -232,6 +157,94 @@ public final class WorksheetChartCreator
         {
             chart.setTitleText(config.getChartTitle());
             chart.setTitleOverlay(false);
+        }
+
+        switch (type)
+        {
+            case PIE:
+            case PIE3D:
+            case DOUGHNUT:
+
+                isPieBased = true;
+                data = chart.createData(type, null, null);
+
+                if (data instanceof XDDFDoughnutChartData)
+                {
+                    ((XDDFDoughnutChartData) data).setHoleSize(60);
+                }
+
+                else if (data instanceof XDDFPie3DChartData)
+                {
+                    XDDFView3D view3D = chart.getOrAddView3D();
+                    view3D.setXRotationAngle((byte) 30);
+                    view3D.setYRotationAngle(0);
+                    view3D.setPerspectiveAngle((short) 30);
+                }
+            break;
+
+            default:
+                categoryAxis = chart.createCategoryAxis(xAxis);
+                valueAxis = chart.createValueAxis(yAxis);
+                categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+                valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+                valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
+                data = chart.createData(type, categoryAxis, valueAxis);
+
+                if (data instanceof XDDFBarChartData)
+                {
+                    configureBarChart((XDDFBarChartData) data, valueAxis, config);
+                }
+
+                else
+                {
+                    // TODO add more for other chart types later
+                }
+        }
+
+        List<ChartDataPoint> dataPoint = config.getDataPoints();
+        int len = dataPoint.size();
+        String[] catArr = new String[len];
+        Number[] valArr = new Number[len];
+
+        for (int i = 0; i < len; i++)
+        {
+            catArr[i] = dataPoint.get(i).getCategory();
+            valArr[i] = dataPoint.get(i).getValue();
+        }
+
+        XDDFCategoryDataSource categories = XDDFDataSourcesFactory.fromArray(catArr);
+        XDDFNumericalDataSource<? extends Number> values = XDDFDataSourcesFactory.fromArray(valArr);
+        XDDFChartData.Series series = data.addSeries(categories, values);
+
+        configureChartTitle(chart, config);
+
+        if (!isPieBased)
+        {
+            configureChartLegend(chart, config);
+            series.setTitle(config.getSeriesName(), null);
+
+            byte[] rgbFillBytes = config.getRgbFillBytes();
+
+            if (rgbFillBytes != null)
+            {
+                XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
+                XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
+
+                shapeProperties.setFillProperties(fill);
+                series.setShapeProperties(shapeProperties);
+            }
+        }
+
+        chart.plot(data);
+
+        if (isPieBased)
+        {
+            drawCustomLegendBox(chart, config);
+        }
+
+        else if (data instanceof XDDFBarChartData)
+        {
+            addDataLabels(chart);
         }
 
         return chart;
@@ -256,13 +269,6 @@ public final class WorksheetChartCreator
         barData.setGapWidth(80);
 
         setBarScaleLogBase(valueAxis, config.getBarScaleLogBase());
-    }
-
-    // TODO: Add Javadoc
-    private static void configureDoughnutChart(XDDFDoughnutChartData doughnutData)
-    {
-        doughnutData.setVaryColors(true);
-        doughnutData.setHoleSize(60);
     }
 
     /**
@@ -411,306 +417,328 @@ public final class WorksheetChartCreator
         }
     }
 
-    private void addCustomLegend3(XSSFChart chart, ConfiguredChartData config)
-    {
-        ConfiguredLegendData legendData = config.getLegendData();
-
-        if (legendData != null && !legendData.getEntries().isEmpty())
-        {
-            CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
-
-            for (CTPieSer series : doughnutChart.getSerArray())
-            {
-                CTNumDataSource valueSource = series.getVal();
-                CTNumData values = valueSource.getNumLit();
-                double[] percentages = new double[values.sizeOfPtArray()];
-                int index = 0;
-
-                double total = 0.0;
-
-                for (CTNumVal point : values.getPtArray())
-                {
-                    total += Double.parseDouble(point.getV());
-                }
-
-                for (CTNumVal point : values.getPtArray())
-                {
-                    double value = Double.parseDouble(point.getV());
-                    percentages[index++] = total == 0.0 ? 0.0 : value / total * 100.0;
-                    System.out.printf("LOOK: %s\n", percentages[index - 1]);
-                }
-
-                if (series.isSetDLbls())
-                {
-                    series.unsetDLbls();
-                }
-
-                for (int i = 0; i < legendData.getEntries().size(); i++)
-                {
-                    ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
-
-                    byte[] rgb = entry.getRgbBytes();
-
-                    if (rgb == null || rgb.length != 3)
-                    {
-                        continue;
-                    }
-
-                    CTDPt dataPoint = series.addNewDPt();
-
-                    dataPoint.addNewIdx().setVal(i);
-                    dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
-                }
-            }
-
-            if (chart.getCTChart().isSetLegend())
-            {
-                chart.getCTChart().unsetLegend();
-            }
-
-            int rowOffset = 0;
-            int startCol = config.getFromCol() + 5;
-            int startRow = config.getFromRow() + 6;
-
-            for (ConfiguredLegendData.LegendEntry entry : legendData.getEntries())
-            {
-                byte[] rgb = entry.getRgbBytes();
-                int row = startRow + (rowOffset * 2);
-
-                XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
-                XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
-
-                colourSquare.setShapeType(ShapeTypes.RECT);
-
-                if (rgb != null && rgb.length == 3)
-                {
-                    colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
-                    colourSquare.setLineStyleColor(0, 0, 0);
-                }
-
-                // Category label
-                XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
-                XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
-
-                labelBox.setText(entry.getLabel());
-
-                // Percentage
-                XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, startCol + 2, row, startCol + 3, row + 1);
-                XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
-
-                percentageBox.setText(entry.getPercentageText());
-                percentageBox.setTextDirection(TextDirection.HORIZONTAL);
-
-                rowOffset++;
-            }
-
-            CTPlotArea plotArea = chart.getCTChart().getPlotArea();
-            CTLayout layout = (plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout());
-
-            /*
-             * From raw chart.xml
-             * <c:manualLayout>
-             * <c:layoutTarget val="inner"/>
-             * <c:xMode val="edge"/>
-             * <c:yMode val="edge"/>
-             * <c:x val="5.4404117454068243E-2"/>
-             * <c:y val="0.1295334645669291"/>
-             * <c:w val="0.49714587434383201"/>
-             * <c:h val="0.79543339895013121"/>
-             * </c:manualLayout>
-             */
-            CTManualLayout manualLayout = layout.addNewManualLayout();
-
-            manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
-            manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
-            manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
-            manualLayout.addNewX().setVal(0.054404117454068243);
-            manualLayout.addNewY().setVal(0.1295334645669291);
-            manualLayout.addNewW().setVal(0.49714587434383201);
-            manualLayout.addNewH().setVal(0.79543339895013121);
-        }
-    }
-
     /**
-     * Adds a custom legend to a doughnut chart.
+     * Adds a custom legend to a pie based chart.
      *
      * <p>
      * Creates coloured swatches, category labels and calculated percentages using worksheet drawing
-     * objects. Also applies the configured colours to the doughnut chart slices and adjusts the
-     * plot area to accommodate the custom legend.
+     * objects. Also applies the configured colours to the chart slices and adjusts the plot area to
+     * accommodate the custom legend.
      * </p>
      *
      * @param chart
-     *        the doughnut chart to configure
+     *        the pie based chart to configure
      * @param config
-     *        the chart configuration containing the legend entries
+     *        the chart configuration containing the category, value and colour data points
      */
-    private void addCustomLegend(XSSFChart chart, ConfiguredChartData config)
+    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config)
     {
-        ConfiguredLegendData legendData = config.getLegendData();
+        double total = 0.0;
+        CTPieSer[] seriesArray;
+        List<String> categories = new ArrayList<>();
+        List<Double> values = new ArrayList<>();
+        List<ChartDataPoint> dataPoints = config.getDataPoints();
 
-        if (legendData != null && !legendData.getEntries().isEmpty())
+        switch (config.getChartType())
         {
-            List<double[]> seriesPercentages = new ArrayList<double[]>();
-            CTDoughnutChart doughnutChart = chart.getCTChart().getPlotArea().getDoughnutChartArray(0);
+            case DOUGHNUT:
+                seriesArray = chart.getCTChart().getPlotArea().getDoughnutChartArray(0).getSerArray();
+            break;
 
-            for (CTPieSer series : doughnutChart.getSerArray())
+            case PIE:
+                seriesArray = chart.getCTChart().getPlotArea().getPieChartArray(0).getSerArray();
+            break;
+
+            case PIE3D:
+                seriesArray = chart.getCTChart().getPlotArea().getPie3DChartArray(0).getSerArray();
+            break;
+
+            default:
+                throw new IllegalArgumentException("Unsupported chart type.");
+        }
+
+        // Remove the native chart legend. A new custom worksheet based legend replaces it instead.
+        if (chart.getCTChart().isSetLegend())
+        {
+            chart.getCTChart().unsetLegend();
+        }
+
+        for (CTPieSer series : seriesArray)
+        {
+            CTNumData valueData = null;
+            CTStrData categoryData = null;
+            CTNumDataSource valueSource = series.getVal();
+            CTAxDataSource categorySource = series.getCat();
+
+            // Remove native data labels. New percentages are displayed in the custom legend box.
+            if (series.isSetDLbls())
             {
-                int index = 0;
-                double total = 0.0;
-                CTNumData values = null;
-                CTNumDataSource valueSource = series.getVal();
+                series.unsetDLbls();
+            }
 
-                if (valueSource.isSetNumLit())
+            // Obtain categories from literal data or a string reference cache.
+            if (categorySource.isSetStrLit())
+            {
+                categoryData = categorySource.getStrLit();
+            }
+
+            else if (categorySource.isSetStrRef())
+            {
+                CTStrRef strRef = categorySource.getStrRef();
+
+                if (strRef.isSetStrCache())
                 {
-                    values = valueSource.getNumLit();
+                    categoryData = strRef.getStrCache();
                 }
+            }
 
-                else if (valueSource.isSetNumRef())
+            // Obtain values from literal data or a numeric reference cache.
+            if (valueSource.isSetNumLit())
+            {
+                valueData = valueSource.getNumLit();
+            }
+
+            else if (valueSource.isSetNumRef())
+            {
+                CTNumRef numRef = valueSource.getNumRef();
+
+                if (numRef.isSetNumCache())
                 {
-                    CTNumRef numRef = valueSource.getNumRef();
-
-                    if (numRef.isSetNumCache())
-                    {
-                        values = numRef.getNumCache();
-                    }
+                    valueData = numRef.getNumCache();
                 }
+            }
 
-                if (values == null)
+            if (categoryData != null)
+            {
+                for (CTStrVal point : categoryData.getPtArray())
                 {
-                    continue;
+                    categories.add(point.getV());
                 }
+            }
 
-                double[] numericalValues = new double[values.sizeOfPtArray()];
-
-                for (CTNumVal point : values.getPtArray())
+            if (valueData != null)
+            {
+                for (CTNumVal point : valueData.getPtArray())
                 {
                     double value = Double.parseDouble(point.getV());
 
-                    numericalValues[index++] = value;
+                    values.add(Double.valueOf(value));
                     total += value;
                 }
-
-                double[] percentages = new double[numericalValues.length];
-
-                for (int i = 0; i < numericalValues.length; i++)
-                {
-                    percentages[i] = (total == 0.0 ? 0.0 : numericalValues[i] / total * 100.0);
-                }
-
-                if (percentages.length != legendData.getEntries().size())
-                {
-                    throw new IllegalArgumentException("Chart series values do not match the configured legend entries");
-                }
-
-                seriesPercentages.add(percentages);
-
-                if (series.isSetDLbls())
-                {
-                    series.unsetDLbls();
-                }
-
-                for (int i = 0; i < legendData.getEntries().size(); i++)
-                {
-                    ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
-
-                    byte[] rgb = entry.getRgbBytes();
-
-                    if (rgb == null || rgb.length != 3)
-                    {
-                        continue;
-                    }
-
-                    CTDPt dataPoint = series.addNewDPt();
-
-                    dataPoint.addNewIdx().setVal(i);
-                    dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
-                }
             }
 
-            if (seriesPercentages.isEmpty())
+            if (categories.size() != values.size())
             {
-                return;
+                throw new IllegalStateException("Category count does not match value count.");
             }
 
-            if (chart.getCTChart().isSetLegend())
+            if (categories.size() != dataPoints.size())
             {
-                chart.getCTChart().unsetLegend();
+                throw new IllegalStateException("Chart category count does not match configured data point count.");
             }
 
-            int startCol = config.getFromCol() + 5;
-            int startRow = config.getFromRow() + 6;
-
-            for (int i = 0; i < legendData.getEntries().size(); i++)
+            for (int i = 0; i < categories.size(); i++)
             {
-                ConfiguredLegendData.LegendEntry entry = legendData.getEntries().get(i);
+                byte[] rgb = dataPoints.get(i).getColourRGB();
 
-                int row = startRow + (i * 2);
-                byte[] rgb = entry.getRgbBytes();
+                CTDPt dataPoint = series.addNewDPt();
+                dataPoint.addNewIdx().setVal(i);
+                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+            }
+        }
 
-                // Colour square
-                XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, startCol, row, startCol, row + 1);
-                XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+        int offsetCol = config.getFromCol() + 5;
+        int offsetRow = config.getFromRow() + 6;
 
-                colourSquare.setShapeType(ShapeTypes.RECT);
+        for (int i = 0; i < categories.size(); i++)
+        {
+            ChartDataPoint point = dataPoints.get(i);
+            int row = offsetRow + (i * 2);
+            byte[] rgb = (point.getColourRGB() == null ? config.getRgbFillBytes() : point.getColourRGB());
 
-                if (rgb != null && rgb.length == 3)
-                {
-                    colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
-                    colourSquare.setLineStyleColor(0, 0, 0);
-                }
+            // Colour square
+            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, offsetCol, row, offsetCol, row + 1);
+            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
 
-                // Category label
-                XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, startCol, row, startCol + 2, row + 1);
-                XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+            colourSquare.setShapeType(ShapeTypes.RECT);
+            colourSquare.setLineStyleColor(0, 0, 0);
+            colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
 
-                labelBox.setText(entry.getLabel());
+            // Category label
+            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
+            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
 
-                // Percentage columns, one for each doughnut series
-                for (int seriesIndex = 0; seriesIndex < seriesPercentages.size(); seriesIndex++)
-                {
-                    double[] percentages = seriesPercentages.get(seriesIndex);
+            labelBox.setText(categories.get(i));
 
-                    if (i >= percentages.length)
-                    {
-                        continue;
-                    }
+            // Percentage column
+            int percentCol = offsetCol + 2;
+            double percent = (total == 0.0 ? 0.0 : values.get(i).doubleValue() / total * 100.0);
 
-                    int percentageCol = startCol + 2 + seriesIndex;
+            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentCol, row, percentCol + 1, row + 1);
+            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+            percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percent));
+            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
+        }
 
-                    XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentageCol, row, percentageCol + 1, row + 1);
-                    XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
-                    percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percentages[i]));
-                    percentageBox.setTextDirection(TextDirection.HORIZONTAL);
-                }
+        configureCustomLegendLayout(chart);
+    }
+
+    /*
+     * Manual plot area layout values obtained from the generated chart XML. These values
+     * reserve space on the right for the custom legend. Example from raw chart.xml below:
+     *
+     * <c:manualLayout>
+     * <c:layoutTarget val="inner"/>
+     * <c:xMode val="edge"/>
+     * <c:yMode val="edge"/>
+     * <c:x val="5.4404117454068243E-2"/>
+     * <c:y val="0.1295334645669291"/>
+     * <c:w val="0.49714587434383201"/>
+     * <c:h val="0.79543339895013121"/>
+     * </c:manualLayout>
+     */
+    private void configureCustomLegendLayout(XSSFChart chart)
+    {
+        CTPlotArea plotArea = chart.getCTChart().getPlotArea();
+        CTLayout layout = plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout();
+        CTManualLayout manualLayout = layout.addNewManualLayout();
+
+        manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
+        manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
+        manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
+
+        manualLayout.addNewX().setVal(0.054404117454068243);
+        manualLayout.addNewY().setVal(0.1295334645669291);
+        manualLayout.addNewW().setVal(0.49714587434383201);
+        manualLayout.addNewH().setVal(0.79543339895013121);
+    }
+
+    /**
+     * Adds a custom legend to a pie based chart.
+     *
+     * <p>
+     * Creates coloured swatches, category labels and calculated percentages using worksheet drawing
+     * objects. Also applies the configured colours to the chart slices and adjusts the plot area to
+     * accommodate the custom legend.
+     * </p>
+     *
+     * @param chart
+     *        the pie based chart to configure
+     * @param config
+     *        the chart configuration containing the category, value and colour data points
+     */
+    @Deprecated
+    private void drawCustomLegendBoxTest(XSSFChart chart, ConfiguredChartData config)
+    {
+        Objects.requireNonNull(chart, "Chart must not be null");
+        Objects.requireNonNull(config, "Config must not be null");
+
+        List<ChartDataPoint> dataPoints = config.getDataPoints();
+
+        if (dataPoints == null || dataPoints.isEmpty())
+        {
+            return;
+        }
+
+        CTPieSer series;
+
+        switch (config.getChartType())
+        {
+            case DOUGHNUT:
+                series = chart.getCTChart().getPlotArea().getDoughnutChartArray(0).getSerArray(0);
+            break;
+
+            case PIE:
+                series = chart.getCTChart().getPlotArea().getPieChartArray(0).getSerArray(0);
+            break;
+
+            case PIE3D:
+                series = chart.getCTChart().getPlotArea().getPie3DChartArray(0).getSerArray(0);
+            break;
+
+            default:
+                throw new IllegalArgumentException("Unsupported chart type.");
+        }
+
+        // Remove the native chart legend and data labels
+        if (chart.getCTChart().isSetLegend())
+        {
+            chart.getCTChart().unsetLegend();
+        }
+
+        if (series.isSetDLbls())
+        {
+            series.unsetDLbls();
+        }
+
+        double total = 0.0;
+        for (ChartDataPoint point : dataPoints)
+        {
+            total += point.getValue().doubleValue();
+        }
+
+        // Apply custom colors to series data points and extract data directly from config
+        for (int i = 0; i < dataPoints.size(); i++)
+        {
+            ChartDataPoint point = dataPoints.get(i);
+            byte[] rgb = point.getColourRGB();
+
+            if (rgb != null && rgb.length == 3)
+            {
+                CTDPt dataPoint = series.addNewDPt();
+                dataPoint.addNewIdx().setVal(i);
+                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+            }
+        }
+
+        // Configure manual layout to reserve space for the legend
+        CTPlotArea plotArea = chart.getCTChart().getPlotArea();
+        CTLayout layout = plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout();
+        CTManualLayout manualLayout = layout.addNewManualLayout();
+
+        manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
+        manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
+        manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
+        manualLayout.addNewX().setVal(0.054404117454068243);
+        manualLayout.addNewY().setVal(0.1295334645669291);
+        manualLayout.addNewW().setVal(0.49714587434383201);
+        manualLayout.addNewH().setVal(0.79543339895013121);
+
+        // Render shapes and text boxes on the sheet
+        int offsetCol = config.getFromCol() + 5;
+        int offsetRow = config.getFromRow() + 6;
+
+        for (int i = 0; i < dataPoints.size(); i++)
+        {
+            ChartDataPoint point = dataPoints.get(i);
+            int row = offsetRow + (i * 2);
+            byte[] rgb = point.getColourRGB();
+
+            // Colour square
+            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, offsetCol, row, offsetCol, row + 1);
+            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+
+            colourSquare.setShapeType(ShapeTypes.RECT);
+            colourSquare.setLineStyleColor(0, 0, 0);
+
+            if (rgb != null && rgb.length == 3)
+            {
+                colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
             }
 
-            CTPlotArea plotArea = chart.getCTChart().getPlotArea();
-            CTLayout layout = plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout();
+            // Category label
+            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
+            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+            labelBox.setText(point.getCategory());
 
-            /*
-             * From raw chart.xml
-             *
-             * <c:manualLayout>
-             * <c:layoutTarget val="inner"/>
-             * <c:xMode val="edge"/>
-             * <c:yMode val="edge"/>
-             * <c:x val="5.4404117454068243E-2"/>
-             * <c:y val="0.1295334645669291"/>
-             * <c:w val="0.49714587434383201"/>
-             * <c:h val="0.79543339895013121"/>
-             * </c:manualLayout>
-             */
+            // Percentage column
+            int percentCol = offsetCol + 2;
+            double percent = (total == 0.0 ? 0.0 : point.getValue().doubleValue() / total * 100.0);
 
-            CTManualLayout manualLayout = layout.addNewManualLayout();
-
-            manualLayout.addNewLayoutTarget().setVal(STLayoutTarget.INNER);
-            manualLayout.addNewXMode().setVal(STLayoutMode.EDGE);
-            manualLayout.addNewYMode().setVal(STLayoutMode.EDGE);
-            manualLayout.addNewX().setVal(0.054404117454068243);
-            manualLayout.addNewY().setVal(0.1295334645669291);
-            manualLayout.addNewW().setVal(0.49714587434383201);
-            manualLayout.addNewH().setVal(0.79543339895013121);
+            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentCol, row, percentCol + 1, row + 1);
+            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+            percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percent));
+            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
         }
     }
 }

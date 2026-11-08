@@ -27,7 +27,6 @@ public final class ConfiguredChartData
     private final int chartTitleFontPoint;
     private final byte[] rgbTitleBytes;
     private final int legendFontPoint;
-    private final List<ChartSeries> series;
     private final int barScaleLogBase;
     private final int fromCol;
     private final int fromRow;
@@ -35,7 +34,8 @@ public final class ConfiguredChartData
     private final int toRow;
     private final BarDirection barDirection;
     private final byte[] rgbChartFillBytes;
-    private final ConfiguredLegendData legendData;
+    private final String seriesName;
+    private final List<ChartDataPoint> dataPoints;
 
     /**
      * Constructs a fully initialised chart configuration from the specified builder.
@@ -58,7 +58,6 @@ public final class ConfiguredChartData
         this.chartTitleFontPoint = builder.bd_titleFontPoint;
         this.rgbTitleBytes = (builder.bd_rgbTitleBytes != null ? builder.bd_rgbTitleBytes.clone() : null);
         this.legendFontPoint = builder.bd_legendFontPoint;
-        this.series = Collections.unmodifiableList(new ArrayList<>(builder.bd_series));
         this.barScaleLogBase = builder.bd_barScaleLogBase;
         this.fromCol = builder.bd_fromCol;
         this.fromRow = builder.bd_fromRow;
@@ -66,7 +65,8 @@ public final class ConfiguredChartData
         this.toRow = builder.bd_toRow;
         this.barDirection = builder.bd_barDirection;
         this.rgbChartFillBytes = (builder.bd_rgbFillBytes != null ? builder.bd_rgbFillBytes.clone() : null);
-        this.legendData = builder.bd_legendData;
+        this.dataPoints = Collections.unmodifiableList(new ArrayList<>(builder.bd_dataPoints));
+        this.seriesName = builder.bd_seriesName;
     }
 
     /**
@@ -110,24 +110,13 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Returns the font size of the legend contained in this series.
+     * Returns the font size of the chart legend, in points.
      *
-     * @param legendFontPoint
-     *        the font point or size of the chart legend
+     * @return the legend font size
      */
     public int getLegendFontPoint()
     {
         return legendFontPoint;
-    }
-
-    /**
-     * Returns the data series configured for this chart.
-     *
-     * @return an unmodifiable list of chart series
-     */
-    public List<ChartSeries> getSeries()
-    {
-        return series;
     }
 
     /**
@@ -201,9 +190,14 @@ public final class ConfiguredChartData
         return (rgbChartFillBytes != null ? rgbChartFillBytes.clone() : null);
     }
 
-    public ConfiguredLegendData getLegendData()
+    public List<ChartDataPoint> getDataPoints()
     {
-        return legendData;
+        return dataPoints;
+    }
+
+    public String getSeriesName()
+    {
+        return seriesName;
     }
 
     /**
@@ -216,11 +210,12 @@ public final class ConfiguredChartData
     public static final class Builder
     {
         private final ChartTypes bd_type;
+        private final List<ChartDataPoint> bd_dataPoints;
+        private String bd_seriesName;
         private String bd_title;
         private int bd_titleFontPoint;
         private byte[] bd_rgbTitleBytes;
         private int bd_legendFontPoint;
-        private final List<ChartSeries> bd_series;
         private int bd_barScaleLogBase;
         private int bd_fromCol;
         private int bd_fromRow;
@@ -228,7 +223,6 @@ public final class ConfiguredChartData
         private int bd_toRow;
         private BarDirection bd_barDirection;
         private byte[] bd_rgbFillBytes;
-        private ConfiguredLegendData bd_legendData;
 
         /**
          * Creates a builder for the specified chart type.
@@ -250,9 +244,73 @@ public final class ConfiguredChartData
             this.bd_toRow = 0;
             this.bd_barScaleLogBase = 0;
             this.bd_barDirection = BarDirection.COL;
-            this.bd_rgbFillBytes = null;
+            this.bd_rgbFillBytes = new byte[]{(byte) 0, (byte) 0, (byte) 0};
             this.bd_legendFontPoint = 12;
-            this.bd_series = new ArrayList<>();
+            this.bd_seriesName = "";
+            this.bd_dataPoints = new ArrayList<>();
+        }
+
+        /**
+         * Adds a chart data point comprising a category, numerical value and RGB colour. The
+         * category identifies the data point in the chart legend.
+         *
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @param hexColour
+         *        the RGB hexadecimal colour, for example {@code "#0044FF"} for blue
+         * @return this builder instance for method chaining
+         */
+        public Builder series(String cat, Number val, String hexColour)
+        {
+            return series(cat, val, HexByteConversion.decode(hexColour));
+        }
+
+        /**
+         * Adds a chart data point comprising a category, numerical value and RGB colour. The
+         * category identifies the data point in the chart legend.
+         *
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @param rgb
+         *        the RGB colour represented by an array of three bytes
+         * @return this builder instance for method chaining
+         */
+        public Builder series(String cat, Number val, byte[] rgb)
+        {
+            bd_dataPoints.add(new ChartDataPoint(cat, val, rgb));
+            return this;
+        }
+
+        /**
+         * Adds a chart data point comprising a category and numerical value. The category
+         * identifies the data point in the chart legend.
+         *
+         * If no colour is specified, the data point inherits the chart fill colour.
+         * 
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @return this builder instance for method chaining
+         */
+        public Builder series(String cat, Number val)
+        {
+            bd_dataPoints.add(new ChartDataPoint(cat, val, null));
+            return this;
+        }
+
+        public Builder seriesName(String s)
+        {
+            if (s != null)
+            {
+                bd_seriesName = s;
+            }
+
+            return this;
         }
 
         /**
@@ -322,47 +380,6 @@ public final class ConfiguredChartData
                 bd_legendFontPoint = point;
             }
 
-            return this;
-        }
-
-        /**
-         * Adds a data series with integer values.
-         *
-         * The legend entry identifies the series in the chart legend. The integer values are
-         * converted to {@link Number} instances before being stored.
-         *
-         * @param legend
-         *        the series legend
-         * @param legendFontPoint
-         *        the font point or size of the chart legend
-         * @param categories
-         *        the category labels associated with the values
-         * @param values
-         *        the integer values to be plotted
-         * @return this builder instance for method chaining
-         */
-        public Builder series(String legend, String[] categories, int[] values)
-        {
-            bd_series.add(new ChartSeries(legend, categories, toNumberArray(values)));
-            return this;
-        }
-
-        /**
-         * Adds a data series with numerical values.
-         *
-         * The legend entry identifies the series in the chart legend.
-         *
-         * @param legend
-         *        the series legend
-         * @param categories
-         *        the category labels associated with the values
-         * @param values
-         *        the numerical values to be plotted
-         * @return this builder instance for method chaining
-         */
-        public Builder series(String legend, String[] categories, Number[] values)
-        {
-            bd_series.add(new ChartSeries(legend, categories, values));
             return this;
         }
 
@@ -477,19 +494,6 @@ public final class ConfiguredChartData
         }
 
         /**
-         * Sets the custom worksheet legend configuration.
-         *
-         * @param legendData
-         *        the legend configuration, or null if no custom legend is required
-         * @return this builder instance for method chaining
-         */
-        public Builder legend(ConfiguredLegendData legendData)
-        {
-            this.bd_legendData = legendData;
-            return this;
-        }
-
-        /**
          * Constructs a {@link ConfiguredChartData} instance using the properties supplied
          * to this builder.
          *
@@ -502,87 +506,63 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Converts an array of primitive integer values into an array of {@link Number} values.
-     *
-     * @param values
-     *        the integer values to convert
-     * @return an array of {@link Number} values, or {@code null} if the input is {@code null}
-     */
-    private static Number[] toNumberArray(int[] values)
-    {
-        if (values == null)
-        {
-            return null;
-        }
-
-        Number[] result = new Number[values.length];
-
-        for (int i = 0; i < values.length; i++)
-        {
-            result[i] = Integer.valueOf(values[i]);
-        }
-
-        return result;
-    }
-
-    /**
      * Represents an individual data series within a chart.
      * 
      * A series consists of a legend entry, category labels, and corresponding numerical values.
      * Category and value arrays are defensively copied when the series is constructed and when they
      * are retrieved.
      */
-    public static final class ChartSeries
+    public static final class ChartDataPoint
     {
-        private final String legend;
-        private final String[] categories;
-        private final Number[] values;
+        private final String category;
+        private final Number value;
+        private final byte[] rgb;
 
-        /**
-         * Constructs a chart series.
-         *
-         * @param legend
-         *        the series legend, typically displayed in the chart legend
-         * @param categories
-         *        the category labels associated with the numerical values
-         * @param values
-         *        the numerical values to be plotted
-         */
-        private ChartSeries(String legend, String[] categories, Number[] values)
+        ChartDataPoint(String cat, Number val, byte[] colours)
         {
-            this.legend = legend;
-            this.categories = categories != null ? categories.clone() : null;
-            this.values = values != null ? values.clone() : null;
+            if (cat == null || cat.trim().isEmpty())
+            {
+                throw new IllegalArgumentException("Category cannot be null or empty.");
+            }
+
+            if (val == null)
+            {
+                throw new IllegalArgumentException("Value cannot be null.");
+            }
+
+            this.category = cat;
+            this.value = val;
+            this.rgb = (colours == null ? null : colours.clone());
         }
 
         /**
-         * Returns the legend of this series.
+         * Returns the category associated with this data point.
          *
-         * @return the series legend, or {@code null} if no legend was specified
+         * @return the category name, or {@code null} if none was specified
          */
-        public String getLegend()
+        public String getCategory()
         {
-            return legend;
+            return category;
         }
 
         /**
-         * Returns the category labels associated with this series.
+         * Returns the numerical value associated with this data point.
          *
-         * @return a copy of the category labels, or {@code null} if none were specified
+         * @return the value, or {@code null} if none was specified
          */
-        public String[] getCategories()
+        public Number getValue()
         {
-            return categories != null ? categories.clone() : null;
+            return value;
         }
 
         /**
-         * Returns the numerical values associated with this series.
+         * Returns the RGB colour associated with this data point.
          *
-         * @return a copy of the numerical values, or {@code null} if none were specified
+         * @return a copy of the RGB colour bytes, or {@code null} if no colour was specified
          */
-        public Number[] getValues()
+        public byte[] getColourRGB()
         {
-            return values != null ? values.clone() : null;
+            return (rgb != null ? rgb.clone() : null);
         }
     }
 }
