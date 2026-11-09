@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Objects;
 import org.apache.poi.xddf.usermodel.chart.BarDirection;
 import org.apache.poi.xddf.usermodel.chart.ChartTypes;
-
 import util.HexByteConversion;
 
 /**
