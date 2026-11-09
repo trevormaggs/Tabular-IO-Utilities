@@ -13,9 +13,9 @@ import util.HexByteConversion;
  * Immutable configuration describing the data, appearance, and layout of a chart to be rendered
  * within an Excel worksheet.
  * 
- * A chart configuration contains chart-level properties and one or more data series. Each series
- * consists of a legend entry, category labels, and corresponding numerical values. The
- * configuration also specifies the chart's position within the worksheet and optional axis scaling.
+ * A chart configuration contains chart-level properties and a collection of data points. Each data
+ * point consists of a category, a numerical value, and an optional RGB colour. The configuration
+ * also specifies the series label, chart position, and optional axis scaling.
  * 
  * Instances are constructed using the nested {@link Builder} class. Mutable input arrays are
  * defensively copied to preserve the immutability of the configuration.
@@ -23,25 +23,22 @@ import util.HexByteConversion;
 public final class ConfiguredChartData
 {
     private final ChartTypes type;
-    private final String chartTitle;
-    private final int chartTitleFontPoint;
-    private final byte[] rgbTitleBytes;
+    private final String title;
+    private final int titleFontPoint;
+    private final byte[] titleBytesRGB;
+    private final String legendLabel;
     private final int legendFontPoint;
-    private final int barScaleLogBase;
+    private final List<ChartDataPoint> series;
     private final int fromCol;
     private final int fromRow;
     private final int toCol;
     private final int toRow;
     private final BarDirection barDirection;
-    private final byte[] rgbChartFillBytes;
-    private final String seriesName;
-    private final List<ChartDataPoint> dataPoints;
+    private final int barScaleLogBase;
+    private final byte[] barFillBytesRGB;
 
     /**
-     * Constructs a fully initialised chart configuration from the specified builder.
-     *
-     * The supplied series list is defensively copied and exposed as an unmodifiable list.
-     * Individual series maintain their own defensive copies of category and value arrays.
+     * Constructs a fully initialised immutable chart configuration from the specified builder.
      *
      * @param builder
      *        the builder containing the chart configuration properties
@@ -54,19 +51,19 @@ public final class ConfiguredChartData
         Objects.requireNonNull(builder, "Builder must not be null");
 
         this.type = Objects.requireNonNull(builder.bd_type, "Chart type cannot be null");
-        this.chartTitle = builder.bd_title;
-        this.chartTitleFontPoint = builder.bd_titleFontPoint;
-        this.rgbTitleBytes = (builder.bd_rgbTitleBytes != null ? builder.bd_rgbTitleBytes.clone() : null);
+        this.title = builder.bd_title;
+        this.titleFontPoint = builder.bd_titleFontPoint;
+        this.titleBytesRGB = (builder.bd_rgbTitleBytes != null ? builder.bd_rgbTitleBytes.clone() : null);
+        this.legendLabel = builder.bd_legendLabel;
         this.legendFontPoint = builder.bd_legendFontPoint;
-        this.barScaleLogBase = builder.bd_barScaleLogBase;
+        this.series = Collections.unmodifiableList(new ArrayList<>(builder.bd_series));
         this.fromCol = builder.bd_fromCol;
         this.fromRow = builder.bd_fromRow;
         this.toCol = builder.bd_toCol;
         this.toRow = builder.bd_toRow;
         this.barDirection = builder.bd_barDirection;
-        this.rgbChartFillBytes = (builder.bd_rgbFillBytes != null ? builder.bd_rgbFillBytes.clone() : null);
-        this.dataPoints = Collections.unmodifiableList(new ArrayList<>(builder.bd_dataPoints));
-        this.seriesName = builder.bd_seriesName;
+        this.barScaleLogBase = builder.bd_barScaleLogBase;
+        this.barFillBytesRGB = (builder.bd_barFillBytesRGB != null ? builder.bd_barFillBytesRGB.clone() : null);
     }
 
     /**
@@ -86,27 +83,37 @@ public final class ConfiguredChartData
      */
     public String getChartTitle()
     {
-        return chartTitle;
+        return title;
     }
 
     /**
-     * Returns the chart title font size in points.
+     * Returns the title font size in points.
      *
      * @return the font size in points, or zero to retain the default size
      */
     public int getChartTitleFontPoint()
     {
-        return chartTitleFontPoint;
+        return titleFontPoint;
     }
 
     /**
      * Returns the RGB colour bytes used for the chart title.
      *
-     * @return the RGB colour bytes, or {@code null} if unspecified
+     * @return the RGB colour bytes, or {@code null} if not specified
      */
     public byte[] getRgbTitleBytes()
     {
-        return (rgbTitleBytes != null ? rgbTitleBytes.clone() : null);
+        return (titleBytesRGB != null ? titleBytesRGB.clone() : null);
+    }
+
+    /**
+     * Returns the legend label describing the series
+     *
+     * @return the legend label , or {@code null} if not specified
+     */
+    public String getLegendLabel()
+    {
+        return legendLabel;
     }
 
     /**
@@ -120,13 +127,13 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Returns the logarithmic base configured for the bar value axis.
+     * Returns the data points belonging to the chart series.
      *
-     * @return the logarithmic base, or zero if logarithmic scaling is not configured
+     * @return an unmodifiable list of chart data points
      */
-    public int getBarScaleLogBase()
+    public List<ChartDataPoint> getSeries()
     {
-        return barScaleLogBase;
+        return series;
     }
 
     /**
@@ -181,23 +188,23 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Returns the RGB colour bytes used for the chart fill.
+     * Returns the logarithmic base configured for the bar value axis.
      *
-     * @return the RGB colour bytes, or {@code null} if unspecified
+     * @return the logarithmic base, or zero if logarithmic scaling is not configured
+     */
+    public int getBarScaleLogBase()
+    {
+        return barScaleLogBase;
+    }
+
+    /**
+     * Returns the RGB colour bytes used for the chart bar fill.
+     *
+     * @return the RGB colour bytes, or {@code null} if not specified
      */
     public byte[] getRgbFillBytes()
     {
-        return (rgbChartFillBytes != null ? rgbChartFillBytes.clone() : null);
-    }
-
-    public List<ChartDataPoint> getDataPoints()
-    {
-        return dataPoints;
-    }
-
-    public String getSeriesName()
-    {
-        return seriesName;
+        return (barFillBytesRGB != null ? barFillBytesRGB.clone() : null);
     }
 
     /**
@@ -210,19 +217,19 @@ public final class ConfiguredChartData
     public static final class Builder
     {
         private final ChartTypes bd_type;
-        private final List<ChartDataPoint> bd_dataPoints;
-        private String bd_seriesName;
         private String bd_title;
         private int bd_titleFontPoint;
         private byte[] bd_rgbTitleBytes;
+        private String bd_legendLabel;
         private int bd_legendFontPoint;
-        private int bd_barScaleLogBase;
+        private final List<ChartDataPoint> bd_series;
         private int bd_fromCol;
         private int bd_fromRow;
         private int bd_toCol;
         private int bd_toRow;
         private BarDirection bd_barDirection;
-        private byte[] bd_rgbFillBytes;
+        private int bd_barScaleLogBase;
+        private byte[] bd_barFillBytesRGB;
 
         /**
          * Creates a builder for the specified chart type.
@@ -236,88 +243,23 @@ public final class ConfiguredChartData
         public Builder(ChartTypes type)
         {
             this.bd_type = Objects.requireNonNull(type, "Chart type must not be null");
-            this.bd_titleFontPoint = 0;
+            this.bd_titleFontPoint = 12;
             this.bd_rgbTitleBytes = new byte[]{(byte) 0, (byte) 0, (byte) 0};
+            this.bd_legendFontPoint = 12;
+            this.bd_series = new ArrayList<>();
             this.bd_fromCol = 0;
             this.bd_fromRow = 0;
             this.bd_toCol = 0;
             this.bd_toRow = 0;
-            this.bd_barScaleLogBase = 0;
             this.bd_barDirection = BarDirection.COL;
-            this.bd_rgbFillBytes = new byte[]{(byte) 0, (byte) 0, (byte) 0};
-            this.bd_legendFontPoint = 12;
-            this.bd_seriesName = "";
-            this.bd_dataPoints = new ArrayList<>();
-        }
-
-        /**
-         * Adds a chart data point comprising a category, numerical value and RGB colour. The
-         * category identifies the data point in the chart legend.
-         *
-         * @param cat
-         *        the category name. For bar charts, it is displayed along the category axis
-         * @param val
-         *        the numerical value to be plotted
-         * @param hexColour
-         *        the RGB hexadecimal colour, for example {@code "#0044FF"} for blue
-         * @return this builder instance for method chaining
-         */
-        public Builder series(String cat, Number val, String hexColour)
-        {
-            return series(cat, val, HexByteConversion.decode(hexColour));
-        }
-
-        /**
-         * Adds a chart data point comprising a category, numerical value and RGB colour. The
-         * category identifies the data point in the chart legend.
-         *
-         * @param cat
-         *        the category name. For bar charts, it is displayed along the category axis
-         * @param val
-         *        the numerical value to be plotted
-         * @param rgb
-         *        the RGB colour represented by an array of three bytes
-         * @return this builder instance for method chaining
-         */
-        public Builder series(String cat, Number val, byte[] rgb)
-        {
-            bd_dataPoints.add(new ChartDataPoint(cat, val, rgb));
-            return this;
-        }
-
-        /**
-         * Adds a chart data point comprising a category and numerical value. The category
-         * identifies the data point in the chart legend.
-         *
-         * If no colour is specified, the data point inherits the chart fill colour.
-         * 
-         * @param cat
-         *        the category name. For bar charts, it is displayed along the category axis
-         * @param val
-         *        the numerical value to be plotted
-         * @return this builder instance for method chaining
-         */
-        public Builder series(String cat, Number val)
-        {
-            bd_dataPoints.add(new ChartDataPoint(cat, val, null));
-            return this;
-        }
-
-        public Builder seriesName(String s)
-        {
-            if (s != null)
-            {
-                bd_seriesName = s;
-            }
-
-            return this;
+            this.bd_barScaleLogBase = 0;
         }
 
         /**
          * Sets the chart title.
          *
          * @param t
-         *        the chart title; leading and trailing whitespace is removed
+         *        the chart title. Leading and trailing whitespace is removed
          * @return this builder instance for method chaining
          */
         public Builder title(String t)
@@ -331,8 +273,23 @@ public final class ConfiguredChartData
         }
 
         /**
+         * Returns the font point, denoting the size of the chart title.
+         *
+         * @return the chart title font point
+         */
+        public Builder titleFontPoint(int point)
+        {
+            if (point >= 0)
+            {
+                bd_titleFontPoint = point;
+            }
+
+            return this;
+        }
+
+        /**
          * Sets the chart title colour using an RGB hexadecimal string, for example:
-         * {@code "#ED7D31"} denotes oranges.
+         * {@code "#ED7D31"} for orange.
          *
          * @param h
          *        the RGB hexadecimal colour string
@@ -352,51 +309,88 @@ public final class ConfiguredChartData
         }
 
         /**
-         * Returns the font point or size of the chart title.
+         * Sets the legend label describing the series.
          *
-         * @return the chart title font point
+         * @param l
+         *        the legend name. Leading and trailing whitespace is removed
+         * @return this builder instance for method chaining
          */
-        public Builder titleFontPoint(int point)
+        public Builder legendLabel(String l)
         {
-            if (point >= 0)
+            if (l != null)
             {
-                bd_titleFontPoint = point;
+                bd_legendLabel = l.trim();
             }
 
             return this;
         }
 
         /**
-         * Returns the font point or size of the chart title.
+         * Sets the font size of the chart legend, in points.
          *
-         * @param legendFontPoint
-         *        the font point or size of the chart legend
+         * @param p
+         *        the legend font size in points
          * @return this builder instance for method chaining
          */
-        public Builder legendFontPoint(int point)
+        public Builder legendFontPoint(int p)
         {
-            if (point >= 0)
+            if (p >= 0)
             {
-                bd_legendFontPoint = point;
+                bd_legendFontPoint = p;
             }
 
             return this;
         }
 
         /**
-         * Sets the logarithmic base for the bar value axis.
+         * Adds a chart data point comprising a category, numerical value and RGB colour. The
+         * category identifies the data point in the chart series.
          *
-         * @param base
-         *        the logarithmic base; values greater than one enable logarithmic scaling
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @param rgb
+         *        the RGB colour represented by an array of three bytes
          * @return this builder instance for method chaining
          */
-        public Builder barScaleLogBase(int base)
+        public Builder series(String cat, Number val, byte[] rgb)
         {
-            if (base > 1)
-            {
-                bd_barScaleLogBase = base;
-            }
+            bd_series.add(new ChartDataPoint(cat, val, rgb));
+            return this;
+        }
 
+        /**
+         * Adds a chart data point comprising a category, numerical value and RGB colour. The
+         * category identifies the data point in the chart series.
+         *
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @param hexColour
+         *        the RGB hexadecimal colour in string, for example {@code "#0044FF"} for blue
+         * @return this builder instance for method chaining
+         */
+        public Builder series(String cat, Number val, String hexColour)
+        {
+            return series(cat, val, HexByteConversion.decode(hexColour));
+        }
+
+        /**
+         * Adds a chart data point comprising a category and numerical value. The category
+         * identifies the data point in the chart series. If no colour is specified, the data point
+         * inherits the chart fill colour.
+         * 
+         * @param cat
+         *        the category name. For bar charts, it is displayed along the category axis
+         * @param val
+         *        the numerical value to be plotted
+         * @return this builder instance for method chaining
+         */
+        public Builder series(String cat, Number val)
+        {
+            bd_series.add(new ChartDataPoint(cat, val, null));
             return this;
         }
 
@@ -456,25 +450,39 @@ public final class ConfiguredChartData
          * Sets the direction of the bars in the chart.
          *
          * @param bd
-         *        the bar direction: {@code "COL"} for vertical columns or
-         *        {@code "BAR"} for horizontal bars
-         *
-         * @throws NullPointerException
-         *         if the specified direction is {@code null}
+         *        the bar direction: {@code "COL"} for vertical columns or {@code "BAR"} for
+         *        horizontal bars
+         * @return this builder instance for method chaining
+         * 
          * @throws IllegalArgumentException
          *         if the specified direction is neither {@code "COL"} nor {@code "BAR"}
          */
         public Builder barDirection(String bd)
         {
-            Objects.requireNonNull(bd, "Bar direction must not be null");
             bd_barDirection = BarDirection.valueOf(bd.trim().toUpperCase());
+            return this;
+        }
+
+        /**
+         * Sets the logarithmic base for the bar value axis.
+         *
+         * @param base
+         *        the logarithmic base; values greater than one enable logarithmic scaling
+         * @return this builder instance for method chaining
+         */
+        public Builder barScaleLogBase(int base)
+        {
+            if (base > 1)
+            {
+                bd_barScaleLogBase = base;
+            }
 
             return this;
         }
 
         /**
-         * Sets the chart fill colour based on the specified RGB hexadecimal string, for example:
-         * {@code "#0044FF"} represents blue.
+         * Sets the chart bar fill colour based on the specified RGB hexadecimal string, for
+         * example: {@code "#0044FF"} represents blue.
          *
          * @param h
          *        the RGB hexadecimal colour string
@@ -487,7 +495,7 @@ public final class ConfiguredChartData
         {
             if (h != null)
             {
-                bd_rgbFillBytes = HexByteConversion.decode(h.trim());
+                bd_barFillBytesRGB = HexByteConversion.decode(h.trim());
             }
 
             return this;
@@ -506,11 +514,9 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Represents an individual data series within a chart.
-     * 
-     * A series consists of a legend entry, category labels, and corresponding numerical values.
-     * Category and value arrays are defensively copied when the series is constructed and when they
-     * are retrieved.
+     * Represents an individual data point within a chart series.
+     *
+     * A data point consists of a category, a numerical value, and an optional RGB colour.
      */
     public static final class ChartDataPoint
     {
@@ -530,15 +536,20 @@ public final class ConfiguredChartData
                 throw new IllegalArgumentException("Value cannot be null.");
             }
 
+            if (colours != null && colours.length != 3)
+            {
+                throw new IllegalArgumentException("RGB colour must contain exactly three bytes.");
+            }
+
             this.category = cat;
             this.value = val;
-            this.rgb = (colours == null ? null : colours.clone());
+            this.rgb = (colours != null ? colours.clone() : null);
         }
 
         /**
          * Returns the category associated with this data point.
          *
-         * @return the category name, or {@code null} if none was specified
+         * @return the category name
          */
         public String getCategory()
         {
@@ -548,7 +559,7 @@ public final class ConfiguredChartData
         /**
          * Returns the numerical value associated with this data point.
          *
-         * @return the value, or {@code null} if none was specified
+         * @return the value
          */
         public Number getValue()
         {

@@ -201,7 +201,7 @@ public final class WorksheetChartCreator
                 }
         }
 
-        List<ChartDataPoint> dataPoint = config.getDataPoints();
+        List<ChartDataPoint> dataPoint = config.getSeries();
         int len = dataPoint.size();
         String[] catArr = new String[len];
         Number[] valArr = new Number[len];
@@ -221,7 +221,7 @@ public final class WorksheetChartCreator
         if (!isPieBased)
         {
             configureChartLegend(chart, config);
-            series.setTitle(config.getSeriesName(), null);
+            series.setTitle(config.getLegendLabel(), null);
 
             byte[] rgbFillBytes = config.getRgbFillBytes();
 
@@ -437,7 +437,7 @@ public final class WorksheetChartCreator
         CTPieSer[] seriesArray;
         List<String> categories = new ArrayList<>();
         List<Double> values = new ArrayList<>();
-        List<ChartDataPoint> dataPoints = config.getDataPoints();
+        List<ChartDataPoint> dataPoints = config.getSeries();
 
         switch (config.getChartType())
         {
@@ -552,25 +552,32 @@ public final class WorksheetChartCreator
 
         for (int i = 0; i < categories.size(); i++)
         {
-            ChartDataPoint point = dataPoints.get(i);
             int row = offsetRow + (i * 2);
+            ChartDataPoint point = dataPoints.get(i);
             byte[] rgb = (point.getColourRGB() == null ? config.getRgbFillBytes() : point.getColourRGB());
 
-            // Colour square
-            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(20000, 30000, 90000, 70000, offsetCol, row, offsetCol, row + 1);
+            // Colour square gets moved to the left side of offsetCol
+            int dx1 = 40000;
+            int dy1 = 80000;
+            int dx2 = dx1 + 100000;
+            int dy2 = dy1 + 100000;
+
+            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(dx1, dy1, dx2, dy2, offsetCol, row, offsetCol, row);
             XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
 
             colourSquare.setShapeType(ShapeTypes.RECT);
             colourSquare.setLineStyleColor(0, 0, 0);
             colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
 
-            // Category label
-            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(40000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
+            // Category label is shifted right with dx1 = 180000 to clear the swatch
+            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(180000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
             XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
 
-            labelBox.setText(categories.get(i));
+            // Removes standard Hyphens "-" to stop it from wrapping over.
+            // \u2011 is a non-breaking hyphen unicode character
+            String categoryText = categories.get(i).replace('-', '\u2011');
+            labelBox.setText(categoryText);
 
-            // Percentage column
             int percentCol = offsetCol + 2;
             double percent = (total == 0.0 ? 0.0 : values.get(i).doubleValue() / total * 100.0);
 
@@ -633,7 +640,7 @@ public final class WorksheetChartCreator
         Objects.requireNonNull(chart, "Chart must not be null");
         Objects.requireNonNull(config, "Config must not be null");
 
-        List<ChartDataPoint> dataPoints = config.getDataPoints();
+        List<ChartDataPoint> dataPoints = config.getSeries();
 
         if (dataPoints == null || dataPoints.isEmpty())
         {
