@@ -302,6 +302,11 @@ public final class ConfiguredChartData
             if (h != null)
             {
                 bd_rgbTitleBytes = HexByteConversion.decode(h.trim());
+                
+                if (bd_rgbTitleBytes != null && bd_rgbTitleBytes.length != 3)
+                {
+                    throw new IllegalArgumentException("RGB colour must contain exactly three bytes");
+                }
             }
 
             return this;

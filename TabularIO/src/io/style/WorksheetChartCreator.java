@@ -5,6 +5,8 @@ import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.ss.usermodel.ShapeTypes;
 import org.apache.poi.xddf.usermodel.XDDFColor;
+import org.apache.poi.xddf.usermodel.XDDFLineProperties;
+import org.apache.poi.xddf.usermodel.XDDFNoFillProperties;
 import org.apache.poi.xddf.usermodel.XDDFShapeProperties;
 import org.apache.poi.xddf.usermodel.XDDFSolidFillProperties;
 import org.apache.poi.xddf.usermodel.chart.AxisCrossBetween;
@@ -13,6 +15,9 @@ import org.apache.poi.xddf.usermodel.chart.AxisPosition;
 import org.apache.poi.xddf.usermodel.chart.BarGrouping;
 import org.apache.poi.xddf.usermodel.chart.ChartTypes;
 import org.apache.poi.xddf.usermodel.chart.LegendPosition;
+import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
+import org.apache.poi.xddf.usermodel.chart.ScatterStyle;
+import org.apache.poi.xddf.usermodel.chart.XDDFAreaChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
 import org.apache.poi.xddf.usermodel.chart.XDDFCategoryDataSource;
@@ -20,8 +25,10 @@ import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
 import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
 import org.apache.poi.xddf.usermodel.chart.XDDFDoughnutChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
 import org.apache.poi.xddf.usermodel.chart.XDDFPie3DChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFScatterChartData;
 import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
 import org.apache.poi.xddf.usermodel.chart.XDDFView3D;
 import org.apache.poi.xssf.usermodel.TextDirection;
@@ -175,18 +182,28 @@ public final class WorksheetChartCreator
             throw new TabularDataException("Unable to create a new chart. Check the configuration entry for null values.");
         }
 
+        XDDFChartData data;
         boolean isPieBased = false;
+        List<ChartDataPoint> dataPoint = config.getSeries();
+        int len = dataPoint.size();
+        String[] catArr = new String[len];
+        Number[] valArr = new Number[len];
         ChartTypes type = config.getChartType();
         XDDFCategoryAxis categoryAxis = null;
         XDDFValueAxis valueAxis = null;
-        XDDFChartData data;
+
         XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
         XSSFChart chart = xssfDrawing.createChart(anchor);
 
-        if (config.getChartTitle() != null)
+        for (int i = 0; i < len; i++)
         {
-            chart.setTitleText(config.getChartTitle());
-            chart.setTitleOverlay(false);
+            catArr[i] = dataPoint.get(i).getCategory();
+            valArr[i] = dataPoint.get(i).getValue();
+        }
+
+        if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
+        {
+            configure3DView(chart);
         }
 
         switch (type)
@@ -194,7 +211,6 @@ public final class WorksheetChartCreator
             case PIE:
             case PIE3D:
             case DOUGHNUT:
-
                 isPieBased = true;
                 data = chart.createData(type, null, null);
 
@@ -205,10 +221,7 @@ public final class WorksheetChartCreator
 
                 else if (data instanceof XDDFPie3DChartData)
                 {
-                    XDDFView3D view3D = chart.getOrAddView3D();
-                    view3D.setXRotationAngle((byte) 30);
-                    view3D.setYRotationAngle(0);
-                    view3D.setPerspectiveAngle((short) 30);
+                    configure3DView(chart);
                 }
             break;
 
@@ -219,27 +232,6 @@ public final class WorksheetChartCreator
                 valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
                 valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
                 data = chart.createData(type, categoryAxis, valueAxis);
-
-                if (data instanceof XDDFBarChartData)
-                {
-                    configureBarChart((XDDFBarChartData) data, valueAxis, config);
-                }
-
-                else
-                {
-                    // TODO add more for other chart types later
-                }
-        }
-
-        List<ChartDataPoint> dataPoint = config.getSeries();
-        int len = dataPoint.size();
-        String[] catArr = new String[len];
-        Number[] valArr = new Number[len];
-
-        for (int i = 0; i < len; i++)
-        {
-            catArr[i] = dataPoint.get(i).getCategory();
-            valArr[i] = dataPoint.get(i).getValue();
         }
 
         XDDFCategoryDataSource categories = XDDFDataSourcesFactory.fromArray(catArr);
@@ -248,6 +240,21 @@ public final class WorksheetChartCreator
 
         configureChartTitle(chart, config);
 
+        if (data instanceof XDDFBarChartData)
+        {
+            configureBarChart((XDDFBarChartData) data, valueAxis, config);
+        }
+
+        else if (data instanceof XDDFLineChartData)
+        {
+            configureLineChart((XDDFLineChartData) data, config);
+        }
+
+        else if (data instanceof XDDFAreaChartData)
+        {
+            ((XDDFAreaChartData) data).setVaryColors(false);
+        }
+
         if (!isPieBased)
         {
             configureChartLegend(chart, config);
@@ -255,14 +262,51 @@ public final class WorksheetChartCreator
 
             byte[] rgbFillBytes = config.getRgbFillBytes();
 
-            if (rgbFillBytes != null)
+            if (rgbFillBytes != null || data instanceof XDDFScatterChartData)
             {
-                XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
                 XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
 
-                shapeProperties.setFillProperties(fill);
+                if (rgbFillBytes != null)
+                {
+                    XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
+
+                    if (data instanceof XDDFLineChartData)
+                    {
+                        XDDFLineProperties lineProperties = new XDDFLineProperties();
+                        lineProperties.setFillProperties(fill);
+                        lineProperties.setWidth(2.5);
+                        shapeProperties.setLineProperties(lineProperties);
+                    }
+
+                    else if (data instanceof XDDFAreaChartData)
+                    {
+                        XDDFLineProperties lineProperties = new XDDFLineProperties();
+                        lineProperties.setFillProperties(fill);
+                        lineProperties.setWidth(1.5);
+                        shapeProperties.setLineProperties(lineProperties);
+                        shapeProperties.setFillProperties(fill);
+                    }
+
+                    else
+                    {
+                        shapeProperties.setFillProperties(fill);
+                    }
+                }
+
+                if (data instanceof XDDFScatterChartData)
+                {
+                    XDDFLineProperties lineProperties = new XDDFLineProperties();
+                    lineProperties.setFillProperties(new XDDFNoFillProperties());
+                    shapeProperties.setLineProperties(lineProperties);
+                }
+
                 series.setShapeProperties(shapeProperties);
             }
+        }
+
+        if (data instanceof XDDFScatterChartData)
+        {
+            configureScatterChart((XDDFScatterChartData) data, config);
         }
 
         chart.plot(data);
@@ -278,6 +322,146 @@ public final class WorksheetChartCreator
         }
 
         return chart;
+    }
+
+    private void configure3DView(XSSFChart chart)
+    {
+        XDDFView3D view3D = chart.getOrAddView3D();
+
+        view3D.setXRotationAngle((byte) 20);
+        view3D.setYRotationAngle(20);
+        view3D.setPerspectiveAngle((short) 30);
+        view3D.setRightAngleAxes(false);
+        view3D.setDepthPercent(150);
+    }
+
+    /**
+     * Configures the font size and optional font colour of a chart title.
+     *
+     * <p>
+     * Font size and font colour are applied independently. Only a positive font size is applied.
+     * </p>
+     *
+     * @param chart
+     *        the chart whose title is to be configured
+     * @param config
+     *        the chart configuration containing the title formatting properties
+     * 
+     * @throws NullPointerException
+     *         if {@code chart} or {@code config} is {@code null}
+     * @throws IllegalArgumentException
+     *         if the configured RGB colour does not contain exactly three bytes
+     */
+    private void configureChartTitle(XSSFChart chart, ConfiguredChartData config)
+    {
+        byte[] rgb = config.getRgbTitleBytes();
+        int fontSize = config.getChartTitleFontPoint();
+
+        if (config.getChartTitle() != null)
+        {
+            chart.setTitleText(config.getChartTitle());
+            chart.setTitleOverlay(false);
+        }
+
+        if (fontSize > 0 || rgb != null)
+        {
+            CTTitle title = chart.getCTChart().getTitle();
+
+            if (title != null && title.getTx() != null && title.getTx().getRich() != null)
+            {
+                for (CTTextParagraph paragraph : title.getTx().getRich().getPArray())
+                {
+                    if (fontSize > 0)
+                    {
+                        if (paragraph.getPPr() == null)
+                        {
+                            paragraph.addNewPPr();
+                        }
+
+                        if (paragraph.getPPr().getDefRPr() == null)
+                        {
+                            paragraph.getPPr().addNewDefRPr();
+                        }
+
+                        paragraph.getPPr().getDefRPr().setSz(fontSize * 100);
+                    }
+
+                    for (CTRegularTextRun run : paragraph.getRArray())
+                    {
+                        CTTextCharacterProperties properties = run.getRPr();
+
+                        if (properties == null)
+                        {
+                            properties = run.addNewRPr();
+                        }
+
+                        if (fontSize > 0)
+                        {
+                            properties.setSz(fontSize * 100);
+                        }
+
+                        if (rgb != null)
+                        {
+                            if (properties.isSetSolidFill())
+                            {
+                                properties.unsetSolidFill();
+                            }
+
+                            properties.addNewSolidFill().addNewSrgbClr().setVal(rgb);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Configures the chart legend position and optional font size.
+     *
+     * <p>
+     * The legend is positioned below the chart. Its text font size is overridden only when a
+     * positive font size is specified in the chart configuration.
+     * </p>
+     *
+     * @param chart
+     *        the chart whose legend is to be configured
+     * @param config
+     *        the chart configuration containing the legend formatting properties
+     */
+    private void configureChartLegend(XSSFChart chart, ConfiguredChartData config)
+    {
+        XDDFChartLegend legend = chart.getOrAddLegend();
+        CTLegend ctLegend = chart.getCTChart().getLegend();
+        CTTextBody textProperties = ctLegend.getTxPr();
+
+        legend.setPosition(LegendPosition.BOTTOM);
+
+        if (textProperties == null)
+        {
+            textProperties = ctLegend.addNewTxPr();
+            textProperties.addNewBodyPr();
+            textProperties.addNewLstStyle();
+            textProperties.addNewP();
+        }
+
+        for (CTTextParagraph paragraph : textProperties.getPArray())
+        {
+            if (paragraph.getPPr() == null)
+            {
+                paragraph.addNewPPr();
+            }
+
+            if (paragraph.getPPr().getDefRPr() == null)
+            {
+                paragraph.getPPr().addNewDefRPr();
+            }
+
+            if (config.getLegendFontPoint() > 0)
+            {
+                paragraph.getPPr().getDefRPr().setSz(config.getLegendFontPoint() * 100);
+                // paragraph.getPPr().getDefRPr().setB(true);
+            }
+        }
     }
 
     /**
@@ -426,157 +610,7 @@ public final class WorksheetChartCreator
     }
 
     // TODO: Add Javadoc
-    private static void setBarScaleLogBase(XDDFValueAxis valueAxis, int base)
-    {
-        if (base > 1)
-        {
-            valueAxis.setLogBase(base);
-            valueAxis.setMinimum(1.0);
-        }
-    }
-
-    // TODO: Add Javadoc
-    private static void configureBarChart(XDDFBarChartData barData, XDDFValueAxis valueAxis, ConfiguredChartData config)
-    {
-        barData.setBarDirection(config.getBarDirection());
-        barData.setBarGrouping(BarGrouping.CLUSTERED);
-        barData.setVaryColors(config.getRgbFillBytes() == null);
-        barData.setGapWidth(80);
-
-        setBarScaleLogBase(valueAxis, config.getBarScaleLogBase());
-    }
-
-    /**
-     * Configures the font size and optional font colour of a chart title.
-     *
-     * <p>
-     * Title formatting is applied only when a positive font size is specified. If an RGB colour is
-     * supplied, it is applied alongside the font size.
-     * </p>
-     *
-     * @param chart
-     *        the chart whose title is to be configured
-     * @param config
-     *        the chart configuration containing the title formatting properties
-     *
-     * @throws NullPointerException
-     *         if {@code chart} or {@code config} is {@code null}
-     * @throws IllegalArgumentException
-     *         if the configured RGB colour does not contain exactly three bytes
-     */
-    private static void configureChartTitle(XSSFChart chart, ConfiguredChartData config)
-    {
-        byte[] rgb = config.getRgbTitleBytes();
-        int fontSize = config.getChartTitleFontPoint();
-
-        if (rgb != null && rgb.length != 3)
-        {
-            throw new IllegalArgumentException("RGB colour must contain exactly three bytes");
-        }
-
-        if (fontSize > 0)
-        {
-            CTTitle title = chart.getCTChart().getTitle();
-
-            if (title != null && title.getTx() != null && title.getTx().getRich() != null)
-            {
-                for (CTTextParagraph paragraph : title.getTx().getRich().getPArray())
-                {
-                    if (fontSize > 0)
-                    {
-                        if (paragraph.getPPr() == null)
-                        {
-                            paragraph.addNewPPr();
-                        }
-
-                        if (paragraph.getPPr().getDefRPr() == null)
-                        {
-                            paragraph.getPPr().addNewDefRPr();
-                        }
-
-                        paragraph.getPPr().getDefRPr().setSz(fontSize * 100);
-                    }
-
-                    for (CTRegularTextRun run : paragraph.getRArray())
-                    {
-                        CTTextCharacterProperties properties = run.getRPr();
-
-                        if (properties == null)
-                        {
-                            properties = run.addNewRPr();
-                        }
-
-                        if (fontSize > 0)
-                        {
-                            properties.setSz(fontSize * 100);
-                        }
-
-                        if (rgb != null)
-                        {
-                            if (properties.isSetSolidFill())
-                            {
-                                properties.unsetSolidFill();
-                            }
-
-                            properties.addNewSolidFill().addNewSrgbClr().setVal(rgb);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Configures the chart legend position and optional font size.
-     *
-     * <p>
-     * The legend is positioned below the chart. Its text font size is overridden only when a
-     * positive font size is specified in the chart configuration.
-     * </p>
-     *
-     * @param chart
-     *        the chart whose legend is to be configured
-     * @param config
-     *        the chart configuration containing the legend formatting properties
-     */
-    private static void configureChartLegend(XSSFChart chart, ConfiguredChartData config)
-    {
-        XDDFChartLegend legend = chart.getOrAddLegend();
-        CTLegend ctLegend = chart.getCTChart().getLegend();
-        CTTextBody textProperties = ctLegend.getTxPr();
-
-        legend.setPosition(LegendPosition.BOTTOM);
-
-        if (textProperties == null)
-        {
-            textProperties = ctLegend.addNewTxPr();
-            textProperties.addNewBodyPr();
-            textProperties.addNewLstStyle();
-            textProperties.addNewP();
-        }
-
-        for (CTTextParagraph paragraph : textProperties.getPArray())
-        {
-            if (paragraph.getPPr() == null)
-            {
-                paragraph.addNewPPr();
-            }
-
-            if (paragraph.getPPr().getDefRPr() == null)
-            {
-                paragraph.getPPr().addNewDefRPr();
-            }
-
-            if (config.getLegendFontPoint() > 0)
-            {
-                paragraph.getPPr().getDefRPr().setSz(config.getLegendFontPoint() * 100);
-                // paragraph.getPPr().getDefRPr().setB(true);
-            }
-        }
-    }
-
-    // TODO: Add Javadoc
-    private static void addDataLabels(XSSFChart chart)
+    private void addDataLabels(XSSFChart chart)
     {
         CTBarChart barChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
 
@@ -589,6 +623,85 @@ public final class WorksheetChartCreator
             dataLabels.addNewShowCatName().setVal(false);
             dataLabels.addNewShowSerName().setVal(false);
             dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
+        }
+    }
+
+    // TODO: Add Javadoc
+    private void configureBarChart(XDDFBarChartData barData, XDDFValueAxis valueAxis, ConfiguredChartData config)
+    {
+        int base = config.getBarScaleLogBase();
+
+        if (base > 1)
+        {
+            valueAxis.setLogBase(base);
+            valueAxis.setMinimum(1.0);
+        }
+
+        barData.setBarDirection(config.getBarDirection());
+        barData.setBarGrouping(BarGrouping.CLUSTERED);
+        barData.setVaryColors(config.getRgbFillBytes() == null);
+        barData.setGapWidth(80);
+    }
+
+    /**
+     * Configures line chart properties such as line smoothing and markers.
+     *
+     * @param lineData
+     *        the line chart data object
+     * @param config
+     *        the chart configuration
+     */
+    private void configureLineChart(XDDFLineChartData lineData, ConfiguredChartData config)
+    {
+        lineData.setVaryColors(false);
+
+        // Iterate through the series using index-based access
+        int seriesCount = lineData.getSeriesCount();
+
+        for (int i = 0; i < seriesCount; i++)
+        {
+            XDDFChartData.Series series = lineData.getSeries(i);
+
+            if (series instanceof XDDFLineChartData.Series)
+            {
+                XDDFLineChartData.Series lineSeries = (XDDFLineChartData.Series) series;
+
+                lineSeries.setSmooth(false);
+                lineSeries.setMarkerStyle(MarkerStyle.CIRCLE);
+                lineSeries.setMarkerSize((short) 5);
+            }
+        }
+    }
+
+    /**
+     * Configures Scatter/XY chart properties.
+     *
+     * @param scatterData
+     *        the scatter chart data object
+     * @param config
+     *        the chart configuration
+     */
+    private void configureScatterChart(XDDFScatterChartData scatterData, ConfiguredChartData config)
+    {
+        int seriesCount = scatterData.getSeriesCount();
+
+        scatterData.setVaryColors(false);
+        scatterData.setStyle(ScatterStyle.SMOOTH_MARKER);
+
+        for (int i = 0; i < seriesCount; i++)
+        {
+            XDDFScatterChartData.Series scatterSeries = (XDDFScatterChartData.Series) scatterData.getSeries(i);
+
+            scatterSeries.setSmooth(true);
+            scatterSeries.setMarkerStyle(MarkerStyle.DIAMOND);
+            scatterSeries.setMarkerSize((short) 5);
+
+            XDDFLineProperties lineProperties = new XDDFLineProperties();
+            lineProperties.setFillProperties(new XDDFNoFillProperties());
+            // lineProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(new byte[]{52, 120, (byte) 234})));
+            // lineProperties.setWidth(1.5);
+
+            scatterSeries.setLineProperties(lineProperties);
         }
     }
 
@@ -606,7 +719,7 @@ public final class WorksheetChartCreator
      * <c:h val="0.79543339895013121"/>
      * </c:manualLayout>
      */
-    private static void configureCustomLegendLayout(XSSFChart chart)
+    private void configureCustomLegendLayout(XSSFChart chart)
     {
         CTPlotArea plotArea = chart.getCTChart().getPlotArea();
         CTLayout layout = plotArea.isSetLayout() ? plotArea.getLayout() : plotArea.addNewLayout();
