@@ -301,7 +301,7 @@ public final class ConfiguredChartData
         {
             if (h != null)
             {
-                bd_rgbTitleBytes = HexByteConversion.decode(h.trim());
+                bd_rgbTitleBytes = HexByteConversion.decode(h);
                 
                 if (bd_rgbTitleBytes != null && bd_rgbTitleBytes.length != 3)
                 {
@@ -499,7 +499,7 @@ public final class ConfiguredChartData
         {
             if (h != null)
             {
-                bd_barFillBytesRGB = HexByteConversion.decode(h.trim());
+                bd_barFillBytesRGB = HexByteConversion.decode(h);
             }
 
             return this;
