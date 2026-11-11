@@ -4,57 +4,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.ss.usermodel.ShapeTypes;
-import org.apache.poi.xddf.usermodel.XDDFColor;
-import org.apache.poi.xddf.usermodel.XDDFLineProperties;
-import org.apache.poi.xddf.usermodel.XDDFNoFillProperties;
-import org.apache.poi.xddf.usermodel.XDDFShapeProperties;
-import org.apache.poi.xddf.usermodel.XDDFSolidFillProperties;
-import org.apache.poi.xddf.usermodel.chart.AxisCrossBetween;
-import org.apache.poi.xddf.usermodel.chart.AxisCrosses;
-import org.apache.poi.xddf.usermodel.chart.AxisPosition;
-import org.apache.poi.xddf.usermodel.chart.BarGrouping;
-import org.apache.poi.xddf.usermodel.chart.ChartTypes;
-import org.apache.poi.xddf.usermodel.chart.LegendPosition;
-import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
-import org.apache.poi.xddf.usermodel.chart.ScatterStyle;
-import org.apache.poi.xddf.usermodel.chart.XDDFAreaChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
-import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
-import org.apache.poi.xddf.usermodel.chart.XDDFDoughnutChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFPie3DChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFScatterChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
-import org.apache.poi.xddf.usermodel.chart.XDDFView3D;
-import org.apache.poi.xssf.usermodel.TextDirection;
-import org.apache.poi.xssf.usermodel.XSSFChart;
-import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
-import org.apache.poi.xssf.usermodel.XSSFDrawing;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFSimpleShape;
-import org.apache.poi.xssf.usermodel.XSSFTextBox;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarChart;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbls;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDPt;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTLayout;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTLegend;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTManualLayout;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTPieSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTPlotArea;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STDLblPos;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutMode;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutTarget;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
+import org.apache.poi.xddf.usermodel.*;
+import org.apache.poi.xddf.usermodel.chart.*;
+import org.apache.poi.xssf.usermodel.*;
+import org.openxmlformats.schemas.drawingml.x2006.chart.*;
+import org.openxmlformats.schemas.drawingml.x2006.main.*;
 import io.TabularDataException;
 import io.style.ConfiguredChartData.ChartDataPoint;
 
@@ -193,7 +147,6 @@ public final class WorksheetChartCreator
     public XSSFChart renderChart(ConfiguredChartData config) throws TabularDataException
     {
         ChartTypes type = config.getChartType();
-        XDDFShapeProperties shapeProperties = null;
         XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
         XSSFChart chart = xssfDrawing.createChart(anchor);
 
@@ -245,7 +198,15 @@ public final class WorksheetChartCreator
 
         if (data instanceof XDDFBarChartData)
         {
-            configureBarChart((XDDFBarChartData) data, valueAxis, config);
+            int base = config.getBarScaleLogBase();
+
+            if (base > 1)
+            {
+                valueAxis.setLogBase(base);
+                valueAxis.setMinimum(1.0);
+            }
+
+            configureBarChart(chart, (XDDFBarChartData) data, config);
         }
 
         else if (data instanceof XDDFLineChartData)
@@ -266,11 +227,6 @@ public final class WorksheetChartCreator
         else if (data instanceof XDDFScatterChartData)
         {
             configureScatterChart((XDDFScatterChartData) data, config);
-
-            shapeProperties = new XDDFShapeProperties();
-            XDDFLineProperties lineProps = new XDDFLineProperties();
-            lineProps.setFillProperties(new XDDFNoFillProperties());
-            shapeProperties.setLineProperties(lineProps);
         }
 
         if (!isPieBased)
@@ -284,11 +240,6 @@ public final class WorksheetChartCreator
         if (isPieBased)
         {
             drawCustomLegendBox(chart, config);
-        }
-
-        else if (data instanceof XDDFBarChartData)
-        {
-            addDataLabels(chart);
         }
 
         return chart;
@@ -579,23 +530,6 @@ public final class WorksheetChartCreator
         configureCustomLegendLayout(chart);
     }
 
-    // TODO: Add Javadoc
-    private void addDataLabels(XSSFChart chart)
-    {
-        CTBarChart barChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
-
-        for (CTBarSer barSeries : barChart.getSerArray())
-        {
-            CTDLbls dataLabels = barSeries.addNewDLbls();
-
-            dataLabels.addNewShowLegendKey().setVal(false);
-            dataLabels.addNewShowVal().setVal(true);
-            dataLabels.addNewShowCatName().setVal(false);
-            dataLabels.addNewShowSerName().setVal(false);
-            dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
-        }
-    }
-
     /**
      * Configures the properties of a bar chart.
      *
@@ -606,16 +540,10 @@ public final class WorksheetChartCreator
      * @param config
      *        the chart configuration
      */
-    private void configureBarChart(XDDFBarChartData barData, XDDFValueAxis valueAxis, ConfiguredChartData config)
+    private void configureBarChart(XSSFChart chart, XDDFBarChartData barData, ConfiguredChartData config)
     {
-        int base = config.getBarScaleLogBase();
         byte[] rgbFillBytes = config.getRgbFillBytes();
-
-        if (base > 1)
-        {
-            valueAxis.setLogBase(base);
-            valueAxis.setMinimum(1.0);
-        }
+        CTBarChart ctBarChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
 
         barData.setBarDirection(config.getBarDirection());
         barData.setBarGrouping(BarGrouping.CLUSTERED);
@@ -624,12 +552,25 @@ public final class WorksheetChartCreator
 
         if (rgbFillBytes != null)
         {
-            XDDFChartData.Series series = barData.getSeries(0);
-            XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
-            XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
+            for (int i = 0; i < barData.getSeriesCount(); i++)
+            {
+                XDDFChartData.Series series = barData.getSeries(i);
+                XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
 
-            shapeProperties.setFillProperties(fill);
-            series.setShapeProperties(shapeProperties);
+                shapeProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes)));
+                series.setShapeProperties(shapeProperties);
+            }
+        }
+
+        for (CTBarSer barSeries : ctBarChart.getSerArray())
+        {
+            CTDLbls dataLabels = barSeries.addNewDLbls();
+
+            dataLabels.addNewShowLegendKey().setVal(false);
+            dataLabels.addNewShowVal().setVal(true);
+            dataLabels.addNewShowCatName().setVal(false);
+            dataLabels.addNewShowSerName().setVal(false);
+            dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
         }
     }
 
@@ -737,155 +678,4 @@ public final class WorksheetChartCreator
         manualLayout.addNewW().setVal(0.49714587434383201);
         manualLayout.addNewH().setVal(0.79543339895013121);
     }
-
-    @Deprecated
-    public XSSFChart renderChartOld(ConfiguredChartData config) throws TabularDataException
-    {
-        if (config == null)
-        {
-            throw new TabularDataException("Unable to create a new chart. Check the configuration entry for null values.");
-        }
-
-        XDDFChartData data;
-        boolean isPieBased = false;
-        List<ChartDataPoint> dataPoint = config.getSeries();
-        int len = dataPoint.size();
-        String[] catArr = new String[len];
-        Number[] valArr = new Number[len];
-        ChartTypes type = config.getChartType();
-        XDDFCategoryAxis categoryAxis = null;
-        XDDFValueAxis valueAxis = null;
-
-        XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
-        XSSFChart chart = xssfDrawing.createChart(anchor);
-
-        for (int i = 0; i < len; i++)
-        {
-            catArr[i] = dataPoint.get(i).getCategory();
-            valArr[i] = dataPoint.get(i).getValue();
-        }
-
-        if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
-        {
-            configure3DView(chart);
-        }
-
-        switch (type)
-        {
-            case PIE:
-            case PIE3D:
-            case DOUGHNUT:
-                isPieBased = true;
-                data = chart.createData(type, null, null);
-
-                if (data instanceof XDDFDoughnutChartData)
-                {
-                    ((XDDFDoughnutChartData) data).setHoleSize(60);
-                }
-
-                else if (data instanceof XDDFPie3DChartData)
-                {
-                    configure3DView(chart);
-                }
-            break;
-
-            default:
-                categoryAxis = chart.createCategoryAxis(xAxis);
-                valueAxis = chart.createValueAxis(yAxis);
-                categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
-                data = chart.createData(type, categoryAxis, valueAxis);
-        }
-
-        XDDFCategoryDataSource categories = XDDFDataSourcesFactory.fromArray(catArr);
-        XDDFNumericalDataSource<? extends Number> values = XDDFDataSourcesFactory.fromArray(valArr);
-        XDDFChartData.Series series = data.addSeries(categories, values);
-
-        configureChartTitle(chart, config);
-
-        if (data instanceof XDDFBarChartData)
-        {
-            configureBarChart((XDDFBarChartData) data, valueAxis, config);
-        }
-
-        else if (data instanceof XDDFLineChartData)
-        {
-            configureLineChart((XDDFLineChartData) data, config);
-        }
-
-        else if (data instanceof XDDFAreaChartData)
-        {
-            ((XDDFAreaChartData) data).setVaryColors(false);
-        }
-
-        if (!isPieBased)
-        {
-            configureChartLegend(chart, config);
-            series.setTitle(config.getLegendLabel(), null);
-
-            byte[] rgbFillBytes = config.getRgbFillBytes();
-
-            if (rgbFillBytes != null || data instanceof XDDFScatterChartData)
-            {
-                XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
-
-                if (rgbFillBytes != null)
-                {
-                    XDDFSolidFillProperties fill = new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes));
-
-                    if (data instanceof XDDFLineChartData)
-                    {
-                        XDDFLineProperties lineProperties = new XDDFLineProperties();
-                        lineProperties.setFillProperties(fill);
-                        lineProperties.setWidth(2.5);
-                        shapeProperties.setLineProperties(lineProperties);
-                    }
-
-                    else if (data instanceof XDDFAreaChartData)
-                    {
-                        XDDFLineProperties lineProperties = new XDDFLineProperties();
-                        lineProperties.setFillProperties(fill);
-                        lineProperties.setWidth(1.5);
-                        shapeProperties.setLineProperties(lineProperties);
-                        shapeProperties.setFillProperties(fill);
-                    }
-
-                    else
-                    {
-                        shapeProperties.setFillProperties(fill);
-                    }
-                }
-
-                if (data instanceof XDDFScatterChartData)
-                {
-                    XDDFLineProperties lineProperties = new XDDFLineProperties();
-                    lineProperties.setFillProperties(new XDDFNoFillProperties());
-                    shapeProperties.setLineProperties(lineProperties);
-                }
-
-                series.setShapeProperties(shapeProperties);
-            }
-        }
-
-        if (data instanceof XDDFScatterChartData)
-        {
-            configureScatterChart((XDDFScatterChartData) data, config);
-        }
-
-        chart.plot(data);
-
-        if (isPieBased)
-        {
-            drawCustomLegendBox(chart, config);
-        }
-
-        else if (data instanceof XDDFBarChartData)
-        {
-            addDataLabels(chart);
-        }
-
-        return chart;
-    }
-
 }
