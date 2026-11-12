@@ -1,6 +1,5 @@
 package io.style;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.ss.usermodel.ShapeTypes;
@@ -10,7 +9,7 @@ import org.apache.poi.xssf.usermodel.*;
 import org.openxmlformats.schemas.drawingml.x2006.chart.*;
 import org.openxmlformats.schemas.drawingml.x2006.main.*;
 import io.TabularDataException;
-import io.style.ConfiguredChartData.ChartDataPoint;
+import io.style.ConfiguredChartData.ChartSeries;
 
 /**
  * Creates and configures charts on an Excel worksheet using Apache POI.
@@ -144,10 +143,33 @@ public final class WorksheetChartCreator
      * @throws TabularDataException
      *         if {@code config} is {@code null}
      */
+
     public XSSFChart renderChart(ConfiguredChartData config) throws TabularDataException
     {
+        Objects.requireNonNull(config, "Chart configuration cannot be null");
+
         ChartTypes type = config.getChartType();
-        XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
+        ChartSeries[] chartSeries = config.getChartSeries();
+
+        if (chartSeries.length == 0)
+        {
+            throw new IllegalArgumentException("Chart must contain at least one series");
+        }
+
+        boolean isPieBased = type == ChartTypes.PIE
+                || type == ChartTypes.PIE3D
+                || type == ChartTypes.DOUGHNUT;
+
+        if (isPieBased && chartSeries.length != 1)
+        {
+            throw new IllegalArgumentException("Pie-based charts support exactly one series");
+        }
+
+        XSSFClientAnchor anchor = xssfDrawing.createAnchor(
+                0, 0, 0, 0,
+                config.getFromCol(), config.getFromRow(),
+                config.getToCol(), config.getToRow());
+
         XSSFChart chart = xssfDrawing.createChart(anchor);
 
         if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
@@ -155,44 +177,51 @@ public final class WorksheetChartCreator
             configure3DView(chart);
         }
 
-        List<ChartDataPoint> dataPoints = config.getSeries();
-        int len = dataPoints.size();
-        String[] catArr = new String[len];
-        Number[] valArr = new Number[len];
-
-        for (int i = 0; i < len; i++)
-        {
-            catArr[i] = dataPoints.get(i).getCategory();
-            valArr[i] = dataPoints.get(i).getValue();
-        }
-
         XDDFChartData data;
-        boolean isPieBased = false;
         XDDFCategoryAxis categoryAxis = null;
         XDDFValueAxis valueAxis = null;
 
-        switch (type)
+        if (isPieBased)
         {
-            case PIE:
-            case PIE3D:
-            case DOUGHNUT:
-                isPieBased = true;
-                data = chart.createData(type, null, null);
-            break;
+            data = chart.createData(type, null, null);
+        }
+        else
+        {
+            categoryAxis = chart.createCategoryAxis(xAxis);
+            valueAxis = chart.createValueAxis(yAxis);
 
-            default:
-                categoryAxis = chart.createCategoryAxis(xAxis);
-                valueAxis = chart.createValueAxis(yAxis);
-                categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
-                valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
-                data = chart.createData(type, categoryAxis, valueAxis);
-            break;
+            categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+            valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+            valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
+
+            data = chart.createData(type, categoryAxis, valueAxis);
         }
 
-        XDDFCategoryDataSource categories = XDDFDataSourcesFactory.fromArray(catArr);
-        XDDFNumericalDataSource<? extends Number> values = XDDFDataSourcesFactory.fromArray(valArr);
-        XDDFChartData.Series series = data.addSeries(categories, values);
+        for (ChartSeries item : chartSeries)
+        {
+            String[] categories = item.getCategories();
+            Number[] values = item.getValues();
+
+            XDDFCategoryDataSource categoryData = XDDFDataSourcesFactory.fromArray(categories);
+            XDDFNumericalDataSource<? extends Number> valueData = XDDFDataSourcesFactory.fromArray(values);
+
+            XDDFChartData.Series series = data.addSeries(categoryData, valueData);
+
+            if (!isPieBased && item.getLegendLabel() != null)
+            {
+                series.setTitle(item.getLegendLabel(), null);
+            }
+
+            byte[] seriesColour = item.getSeriesColour();
+
+            if (seriesColour != null)
+            {
+                XDDFShapeProperties properties = new XDDFShapeProperties();
+                properties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(seriesColour)));
+
+                series.setShapeProperties(properties);
+            }
+        }
 
         configureChartTitle(chart, config);
 
@@ -231,15 +260,14 @@ public final class WorksheetChartCreator
 
         if (!isPieBased)
         {
-            configureChartLegend(chart, config);
-            series.setTitle(config.getLegendLabel(), null);
+            configureChartLegend(chart, chartSeries[0].getLegendFontPoint());
         }
 
         chart.plot(data);
 
         if (isPieBased)
         {
-            drawCustomLegendBox(chart, config);
+            drawCustomLegendBox(chart, config, chartSeries[0]);
         }
 
         return chart;
@@ -349,7 +377,8 @@ public final class WorksheetChartCreator
      * @param config
      *        the chart configuration containing the legend formatting properties
      */
-    private void configureChartLegend(XSSFChart chart, ConfiguredChartData config)
+
+    private void configureChartLegend(XSSFChart chart, int fontPoint)
     {
         XDDFChartLegend legend = chart.getOrAddLegend();
         CTLegend ctLegend = chart.getCTChart().getLegend();
@@ -365,22 +394,21 @@ public final class WorksheetChartCreator
             textProperties.addNewP();
         }
 
-        for (CTTextParagraph paragraph : textProperties.getPArray())
+        if (fontPoint > 0)
         {
-            if (paragraph.getPPr() == null)
+            for (CTTextParagraph paragraph : textProperties.getPArray())
             {
-                paragraph.addNewPPr();
-            }
+                if (paragraph.getPPr() == null)
+                {
+                    paragraph.addNewPPr();
+                }
 
-            if (paragraph.getPPr().getDefRPr() == null)
-            {
-                paragraph.getPPr().addNewDefRPr();
-            }
+                if (paragraph.getPPr().getDefRPr() == null)
+                {
+                    paragraph.getPPr().addNewDefRPr();
+                }
 
-            if (config.getLegendFontPoint() > 0)
-            {
-                paragraph.getPPr().getDefRPr().setSz(config.getLegendFontPoint() * 100);
-                // paragraph.getPPr().getDefRPr().setB(true);
+                paragraph.getPPr().getDefRPr().setSz(fontPoint * 100);
             }
         }
     }
@@ -403,12 +431,17 @@ public final class WorksheetChartCreator
      *        the pie based chart to configure
      * @param config
      *        the chart configuration containing the category, value and colour data points
+     * @param chartSeries
+     *        the series containing the category, value and point colour data
      */
-    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config)
+    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config, ChartSeries chartSeries)
     {
         double total = 0.0;
         CTPieSer[] seriesArray;
-        List<ChartDataPoint> dataPoints = config.getSeries();
+        String[] categories = chartSeries.getCategories();
+        Number[] values = chartSeries.getValues();
+        byte[][] pointColours = chartSeries.getPointColours();
+        int count = categories.length;
 
         switch (config.getChartType())
         {
@@ -431,11 +464,10 @@ public final class WorksheetChartCreator
         // We are interested in exactly one series at this stage.
         CTPieSer series = seriesArray[0];
 
-        // As the configuration is the source of truth, it calculates the total percentage first.
-        for (int i = 0; i < dataPoints.size(); i++)
+        // Calculate the total before determining the percentage of each data point.
+        for (int i = 0; i < count; i++)
         {
-            ChartDataPoint point = Objects.requireNonNull(dataPoints.get(i), "Chart data point must not be null at index " + i);
-            double value = point.getValue().doubleValue();
+            double value = values[i].doubleValue();
 
             if (Double.isNaN(value) || Double.isInfinite(value) || value < 0.0)
             {
@@ -467,9 +499,10 @@ public final class WorksheetChartCreator
             series.removeDPt(0);
         }
 
-        for (int i = 0; i < dataPoints.size(); i++)
+        // Apply configured point colours to the chart slices.
+        for (int i = 0; i < count; i++)
         {
-            byte[] rgb = dataPoints.get(i).getColourRGB();
+            byte[] rgb = pointColours[i];
 
             if (rgb != null)
             {
@@ -482,14 +515,14 @@ public final class WorksheetChartCreator
         /*
          * Render the custom legend using worksheet drawing objects.
          */
+
         int offsetCol = config.getFromCol() + 5;
         int offsetRow = config.getFromRow() + 6;
 
-        for (int i = 0; i < dataPoints.size(); i++)
+        for (int i = 0; i < count; i++)
         {
-            ChartDataPoint point = dataPoints.get(i);
             int row = offsetRow + (i * 2);
-            byte[] rgb = point.getColourRGB();
+            byte[] rgb = pointColours[i];
 
             // Colour square, positioned to the left of the category label.
             int dx1 = 40000;
@@ -499,7 +532,6 @@ public final class WorksheetChartCreator
 
             XSSFClientAnchor colourAnchor = new XSSFClientAnchor(dx1, dy1, dx2, dy2, offsetCol, row, offsetCol, row);
             XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
-
             colourSquare.setShapeType(ShapeTypes.RECT);
             colourSquare.setLineStyleColor(0, 0, 0);
 
@@ -510,19 +542,19 @@ public final class WorksheetChartCreator
 
             // Category label, shifted right to clear the colour swatch.
             XSSFClientAnchor labelAnchor = new XSSFClientAnchor(180000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
+
             XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
 
             // Replace standard hyphens with non-breaking hyphens to prevent unwanted wrapping.
-            String categoryText = point.getCategory().replace('-', '\u2011');
+            String categoryText = categories[i].replace('-', '\u2011');
             labelBox.setText(categoryText);
 
             // Percentage column.
             int percentCol = offsetCol + 2;
-            double percent = (total == 0.0 ? 0.0 : point.getValue().doubleValue() / total * 100.0);
-
+            double percent = (total == 0.0 ? 0.0 : values[i].doubleValue() / total * 100.0);
             XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentCol, row, percentCol + 1, row + 1);
-            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
 
+            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
             percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percent));
             percentageBox.setTextDirection(TextDirection.HORIZONTAL);
         }
