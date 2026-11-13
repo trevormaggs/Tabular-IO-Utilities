@@ -46,7 +46,6 @@ public final class ConfiguredChartData
         title = builder.bd_title;
         titleFontPoint = builder.bd_titleFontPoint;
         titleBytesRGB = (builder.bd_rgbTitleBytes == null ? null : builder.bd_rgbTitleBytes.clone());
-
         series = new ChartSeries[builder.bd_series.size()];
 
         for (int i = 0; i < series.length; i++)
@@ -61,23 +60,6 @@ public final class ConfiguredChartData
         barDirection = builder.bd_barDirection;
         barScaleLogBase = builder.bd_barScaleLogBase;
         barFillBytesRGB = (builder.bd_barFillBytesRGB == null ? null : builder.bd_barFillBytesRGB.clone());
-    }
-
-    private static byte[][] cloneColours(byte[][] colours)
-    {
-        if (colours == null)
-        {
-            return null;
-        }
-
-        byte[][] copy = new byte[colours.length][];
-
-        for (int i = 0; i < colours.length; i++)
-        {
-            copy[i] = (colours[i] == null ? null : colours[i].clone());
-        }
-
-        return copy;
     }
 
     /**
@@ -235,7 +217,6 @@ public final class ConfiguredChartData
             }
 
             seriesColour = (builder.seriesColour == null ? null : builder.seriesColour.clone());
-
         }
 
         private ChartSeries(ChartSeries source)
@@ -246,7 +227,6 @@ public final class ConfiguredChartData
             values = source.values.clone();
             pointColours = cloneColours(source.pointColours);
             seriesColour = (source.seriesColour == null ? null : source.seriesColour.clone());
-
         }
 
         /**
@@ -317,6 +297,23 @@ public final class ConfiguredChartData
         public int size()
         {
             return categories.length;
+        }
+
+        private static byte[][] cloneColours(byte[][] colours)
+        {
+            if (colours == null)
+            {
+                return null;
+            }
+
+            byte[][] copy = new byte[colours.length][];
+
+            for (int i = 0; i < colours.length; i++)
+            {
+                copy[i] = (colours[i] == null ? null : colours[i].clone());
+            }
+
+            return copy;
         }
     }
 
