@@ -143,33 +143,25 @@ public final class WorksheetChartCreator
      * @throws TabularDataException
      *         if {@code config} is {@code null}
      */
-
     public XSSFChart renderChart(ConfiguredChartData config) throws TabularDataException
     {
         Objects.requireNonNull(config, "Chart configuration cannot be null");
 
         ChartTypes type = config.getChartType();
         ChartSeries[] chartSeries = config.getChartSeries();
+        boolean isPieBased = (type == ChartTypes.PIE || type == ChartTypes.PIE3D || type == ChartTypes.DOUGHNUT);
 
         if (chartSeries.length == 0)
         {
             throw new IllegalArgumentException("Chart must contain at least one series");
         }
 
-        boolean isPieBased = type == ChartTypes.PIE
-                || type == ChartTypes.PIE3D
-                || type == ChartTypes.DOUGHNUT;
-
         if (isPieBased && chartSeries.length != 1)
         {
             throw new IllegalArgumentException("Pie-based charts support exactly one series");
         }
 
-        XSSFClientAnchor anchor = xssfDrawing.createAnchor(
-                0, 0, 0, 0,
-                config.getFromCol(), config.getFromRow(),
-                config.getToCol(), config.getToRow());
-
+        XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
         XSSFChart chart = xssfDrawing.createChart(anchor);
 
         if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
@@ -185,15 +177,14 @@ public final class WorksheetChartCreator
         {
             data = chart.createData(type, null, null);
         }
+
         else
         {
             categoryAxis = chart.createCategoryAxis(xAxis);
             valueAxis = chart.createValueAxis(yAxis);
-
             categoryAxis.setCrosses(AxisCrosses.AUTO_ZERO);
             valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
             valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
-
             data = chart.createData(type, categoryAxis, valueAxis);
         }
 
@@ -201,10 +192,9 @@ public final class WorksheetChartCreator
         {
             String[] categories = item.getCategories();
             Number[] values = item.getValues();
-
+            byte[] seriesColour = item.getSeriesColour();
             XDDFCategoryDataSource categoryData = XDDFDataSourcesFactory.fromArray(categories);
             XDDFNumericalDataSource<? extends Number> valueData = XDDFDataSourcesFactory.fromArray(values);
-
             XDDFChartData.Series series = data.addSeries(categoryData, valueData);
 
             if (!isPieBased && item.getLegendLabel() != null)
@@ -212,13 +202,11 @@ public final class WorksheetChartCreator
                 series.setTitle(item.getLegendLabel(), null);
             }
 
-            byte[] seriesColour = item.getSeriesColour();
-
             if (seriesColour != null)
             {
                 XDDFShapeProperties properties = new XDDFShapeProperties();
-                properties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(seriesColour)));
 
+                properties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(seriesColour)));
                 series.setShapeProperties(properties);
             }
         }
@@ -260,14 +248,14 @@ public final class WorksheetChartCreator
 
         if (!isPieBased)
         {
-            configureChartLegend(chart, chartSeries[0].getLegendFontPoint());
+            configureChartLegend(chart, config);
         }
 
         chart.plot(data);
 
         if (isPieBased)
         {
-            drawCustomLegendBox(chart, config, chartSeries[0]);
+            drawCustomLegendBox(chart, config);
         }
 
         return chart;
@@ -377,9 +365,9 @@ public final class WorksheetChartCreator
      * @param config
      *        the chart configuration containing the legend formatting properties
      */
-
-    private void configureChartLegend(XSSFChart chart, int fontPoint)
+    private void configureChartLegend(XSSFChart chart, ConfiguredChartData config)
     {
+        int fontPoint = config.getChartSeries()[0].getLegendFontPoint();
         XDDFChartLegend legend = chart.getOrAddLegend();
         CTLegend ctLegend = chart.getCTChart().getLegend();
         CTTextBody textProperties = ctLegend.getTxPr();
@@ -423,21 +411,20 @@ public final class WorksheetChartCreator
      * </p>
      *
      * <p>
-     * This method currently supports one series per chart. Support for multiple series may be
-     * introduced in a future version.
+     * This method supports charts containing exactly one series.
      * </p>
      *
      * @param chart
      *        the pie based chart to configure
      * @param config
-     *        the chart configuration containing the category, value and colour data points
-     * @param chartSeries
-     *        the series containing the category, value and point colour data
+     *        the chart configuration containing the single series of category, value and colour
+     *        data
      */
-    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config, ChartSeries chartSeries)
+    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config)
     {
         double total = 0.0;
         CTPieSer[] seriesArray;
+        ChartSeries chartSeries = config.getChartSeries()[0];
         String[] categories = chartSeries.getCategories();
         Number[] values = chartSeries.getValues();
         byte[][] pointColours = chartSeries.getPointColours();
@@ -515,7 +502,6 @@ public final class WorksheetChartCreator
         /*
          * Render the custom legend using worksheet drawing objects.
          */
-
         int offsetCol = config.getFromCol() + 5;
         int offsetRow = config.getFromRow() + 6;
 
