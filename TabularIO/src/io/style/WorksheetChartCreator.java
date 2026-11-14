@@ -3,11 +3,57 @@ package io.style;
 import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.ss.usermodel.ShapeTypes;
-import org.apache.poi.xddf.usermodel.*;
-import org.apache.poi.xddf.usermodel.chart.*;
-import org.apache.poi.xssf.usermodel.*;
-import org.openxmlformats.schemas.drawingml.x2006.chart.*;
-import org.openxmlformats.schemas.drawingml.x2006.main.*;
+import org.apache.poi.xddf.usermodel.XDDFColor;
+import org.apache.poi.xddf.usermodel.XDDFLineProperties;
+import org.apache.poi.xddf.usermodel.XDDFNoFillProperties;
+import org.apache.poi.xddf.usermodel.XDDFShapeProperties;
+import org.apache.poi.xddf.usermodel.XDDFSolidFillProperties;
+import org.apache.poi.xddf.usermodel.chart.AxisCrossBetween;
+import org.apache.poi.xddf.usermodel.chart.AxisCrosses;
+import org.apache.poi.xddf.usermodel.chart.AxisPosition;
+import org.apache.poi.xddf.usermodel.chart.BarGrouping;
+import org.apache.poi.xddf.usermodel.chart.ChartTypes;
+import org.apache.poi.xddf.usermodel.chart.LegendPosition;
+import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
+import org.apache.poi.xddf.usermodel.chart.ScatterStyle;
+import org.apache.poi.xddf.usermodel.chart.XDDFAreaChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFCategoryDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
+import org.apache.poi.xddf.usermodel.chart.XDDFDoughnutChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFScatterChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFView3D;
+import org.apache.poi.xssf.usermodel.TextDirection;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
+import org.apache.poi.xssf.usermodel.XSSFSimpleShape;
+import org.apache.poi.xssf.usermodel.XSSFTextBox;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarChart;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarSer;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbl;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbls;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTDPt;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTLayout;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTLegend;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTManualLayout;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTPieSer;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTPlotArea;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle;
+import org.openxmlformats.schemas.drawingml.x2006.chart.STDLblPos;
+import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutMode;
+import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutTarget;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
 import io.TabularDataException;
 import io.style.ConfiguredChartData.ChartSeries;
 
@@ -163,12 +209,6 @@ public final class WorksheetChartCreator
 
         XSSFClientAnchor anchor = xssfDrawing.createAnchor(0, 0, 0, 0, config.getFromCol(), config.getFromRow(), config.getToCol(), config.getToRow());
         XSSFChart chart = xssfDrawing.createChart(anchor);
-
-        if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
-        {
-            configure3DView(chart);
-        }
-
         XDDFChartData data;
         XDDFCategoryAxis categoryAxis = null;
         XDDFValueAxis valueAxis = null;
@@ -186,6 +226,11 @@ public final class WorksheetChartCreator
             valueAxis.setCrosses(AxisCrosses.AUTO_ZERO);
             valueAxis.setCrossBetween(AxisCrossBetween.BETWEEN);
             data = chart.createData(type, categoryAxis, valueAxis);
+        }
+
+        if (type == ChartTypes.BAR3D || type == ChartTypes.LINE3D || type == ChartTypes.PIE3D)
+        {
+            configure3DView(chart);
         }
 
         for (ChartSeries item : chartSeries)
@@ -223,12 +268,12 @@ public final class WorksheetChartCreator
                 valueAxis.setMinimum(1.0);
             }
 
-            configureBarChart(chart, (XDDFBarChartData) data, config);
+            drawBarChart(chart, (XDDFBarChartData) data, config);
         }
 
         else if (data instanceof XDDFLineChartData)
         {
-            configureLineChart((XDDFLineChartData) data, config);
+            drawLineChart((XDDFLineChartData) data, config);
         }
 
         else if (data instanceof XDDFAreaChartData)
@@ -243,7 +288,7 @@ public final class WorksheetChartCreator
 
         else if (data instanceof XDDFScatterChartData)
         {
-            configureScatterChart((XDDFScatterChartData) data, config);
+            drawScatterChart((XDDFScatterChartData) data, config);
         }
 
         if (!isPieBased)
@@ -261,6 +306,283 @@ public final class WorksheetChartCreator
         return chart;
     }
 
+    /**
+     * Configures the properties of a bar chart.
+     *
+     * @param barData
+     *        the bar chart data object
+     * @param valueAxis
+     *        the Y axis object
+     * @param config
+     *        the chart configuration
+     */
+    private void drawBarChart(XSSFChart chart, XDDFBarChartData barData, ConfiguredChartData config)
+    {
+        byte[] rgbFillBytes = config.getRgbBarFillBytes();
+        CTBarChart ctBarChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
+
+        barData.setBarDirection(config.getBarDirection());
+        barData.setBarGrouping(BarGrouping.CLUSTERED);
+        barData.setVaryColors(rgbFillBytes == null);
+        barData.setGapWidth(80);
+
+        if (rgbFillBytes != null)
+        {
+            for (int i = 0; i < barData.getSeriesCount(); i++)
+            {
+                XDDFChartData.Series series = barData.getSeries(i);
+                XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
+
+                shapeProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes)));
+                series.setShapeProperties(shapeProperties);
+            }
+        }
+
+        ChartSeries[] chartSeries = config.getChartSeries();
+
+        for (int seriesIdx = 0; seriesIdx < ctBarChart.sizeOfSerArray(); seriesIdx++)
+        {
+            CTBarSer barSeries = ctBarChart.getSerArray(seriesIdx);
+            CTDLbls dataLabels = barSeries.addNewDLbls();
+
+            dataLabels.addNewShowLegendKey().setVal(false);
+            dataLabels.addNewShowVal().setVal(true);
+            dataLabels.addNewShowCatName().setVal(false);
+            dataLabels.addNewShowSerName().setVal(false);
+            dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
+
+            // Explicitly delete/hide data labels for zero or negative values
+            // so Excel's log-scale engine doesn't fling them to the top.
+            Number[] values = chartSeries[seriesIdx].getValues();
+
+            for (int i = 0; i < values.length; i++)
+            {
+                if (values[i].doubleValue() <= 0.0)
+                {
+                    CTDLbl dLbl = dataLabels.addNewDLbl();
+                    dLbl.addNewIdx().setVal(i);
+                    dLbl.addNewDelete().setVal(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Configures line chart properties such as line smoothing and markers.
+     *
+     * @param lineData
+     *        the line chart data object
+     * @param config
+     *        the chart configuration
+     */
+    private void drawLineChart(XDDFLineChartData lineData, ConfiguredChartData config)
+    {
+        lineData.setVaryColors(false);
+
+        // Iterate through the series using index-based access
+        int seriesCount = lineData.getSeriesCount();
+
+        for (int i = 0; i < seriesCount; i++)
+        {
+            XDDFChartData.Series series = lineData.getSeries(i);
+
+            if (series instanceof XDDFLineChartData.Series)
+            {
+                XDDFLineChartData.Series lineSeries = (XDDFLineChartData.Series) series;
+
+                lineSeries.setSmooth(false);
+                lineSeries.setMarkerStyle(MarkerStyle.CIRCLE);
+                lineSeries.setMarkerSize((short) 5);
+            }
+        }
+    }
+
+    /**
+     * Configures Scatter/XY chart properties.
+     *
+     * @param scatterData
+     *        the scatter chart data object
+     * @param config
+     *        the chart configuration
+     */
+    private void drawScatterChart(XDDFScatterChartData scatterData, ConfiguredChartData config)
+    {
+        int seriesCount = scatterData.getSeriesCount();
+
+        scatterData.setVaryColors(false);
+        scatterData.setStyle(scatterLineVisible ? ScatterStyle.SMOOTH_MARKER : ScatterStyle.MARKER);
+
+        for (int i = 0; i < seriesCount; i++)
+        {
+            XDDFLineProperties lineProperties = new XDDFLineProperties();
+            XDDFScatterChartData.Series scatterSeries = (XDDFScatterChartData.Series) scatterData.getSeries(i);
+
+            scatterSeries.setSmooth(scatterLineVisible);
+            scatterSeries.setMarkerStyle(MarkerStyle.DIAMOND);
+            scatterSeries.setMarkerSize((short) 5);
+
+            if (scatterLineVisible)
+            {
+                lineProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(new byte[]{52, 120, (byte) 234})));
+                lineProperties.setWidth(1.5);
+            }
+
+            else
+            {
+                lineProperties.setFillProperties(new XDDFNoFillProperties());
+            }
+
+            scatterSeries.setLineProperties(lineProperties);
+        }
+    }
+
+    /**
+     * Adds a custom legend to a pie based chart.
+     *
+     * <p>
+     * Creates coloured swatches, category labels and calculated percentages using worksheet drawing
+     * objects. Also applies the configured colours to the chart slices and adjusts the plot area to
+     * accommodate the custom legend.
+     * </p>
+     *
+     * <p>
+     * This method supports charts containing exactly one series.
+     * </p>
+     *
+     * @param chart
+     *        the pie based chart to configure
+     * @param config
+     *        the chart configuration containing the single series of category, value and colour
+     *        data
+     */
+    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config)
+    {
+        double total = 0.0;
+        CTPieSer[] seriesArray;
+        ChartSeries chartSeries = config.getChartSeries()[0];
+        String[] categories = chartSeries.getCategories();
+        Number[] values = chartSeries.getValues();
+        byte[][] pointColours = chartSeries.getPointColours();
+        int count = categories.length;
+
+        switch (config.getChartType())
+        {
+            case DOUGHNUT:
+                seriesArray = chart.getCTChart().getPlotArea().getDoughnutChartArray(0).getSerArray();
+            break;
+
+            case PIE:
+                seriesArray = chart.getCTChart().getPlotArea().getPieChartArray(0).getSerArray();
+            break;
+
+            case PIE3D:
+                seriesArray = chart.getCTChart().getPlotArea().getPie3DChartArray(0).getSerArray();
+            break;
+
+            default:
+                throw new IllegalArgumentException("Unsupported chart type.");
+        }
+
+        // We are interested in exactly one series at this stage.
+        CTPieSer series = seriesArray[0];
+
+        // Calculate the total before determining the percentage of each data point.
+        for (int i = 0; i < count; i++)
+        {
+            double value = values[i].doubleValue();
+
+            if (Double.isNaN(value) || Double.isInfinite(value) || value < 0.0)
+            {
+                throw new IllegalStateException("Invalid pie chart value at index " + i + ": " + value);
+            }
+
+            total += value;
+        }
+
+        if (Double.isInfinite(total))
+        {
+            throw new IllegalStateException("Total of pie chart values exceeds the supported range.");
+        }
+
+        // Remove the native chart legend. The custom worksheet-based legend replaces it.
+        if (chart.getCTChart().isSetLegend())
+        {
+            chart.getCTChart().unsetLegend();
+        }
+
+        // Remove native data labels. Percentages are displayed in the custom legend box instead.
+        if (series.isSetDLbls())
+        {
+            series.unsetDLbls();
+        }
+
+        while (series.sizeOfDPtArray() > 0)
+        {
+            series.removeDPt(0);
+        }
+
+        // Apply configured point colours to the chart slices.
+        for (int i = 0; i < count; i++)
+        {
+            byte[] rgb = pointColours[i];
+
+            if (rgb != null)
+            {
+                CTDPt dataPoint = series.addNewDPt();
+                dataPoint.addNewIdx().setVal(i);
+                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
+            }
+        }
+
+        /*
+         * Render the custom legend using worksheet drawing objects.
+         */
+        int offsetCol = config.getFromCol() + 5;
+        int offsetRow = config.getFromRow() + 6;
+
+        for (int i = 0; i < count; i++)
+        {
+            int row = offsetRow + (i * 2);
+            byte[] rgb = pointColours[i];
+
+            // Colour square, positioned to the left of the category label.
+            int dx1 = 40000;
+            int dy1 = 80000;
+            int dx2 = dx1 + 100000;
+            int dy2 = dy1 + 100000;
+
+            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(dx1, dy1, dx2, dy2, offsetCol, row, offsetCol, row);
+            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
+            colourSquare.setShapeType(ShapeTypes.RECT);
+            colourSquare.setLineStyleColor(0, 0, 0);
+
+            if (rgb != null)
+            {
+                colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
+            }
+
+            // Category label, shifted right to clear the colour swatch.
+            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(180000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
+            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
+
+            // Replace standard hyphens with non-breaking hyphens to prevent unwanted wrapping.
+            String categoryText = categories[i].replace('-', '\u2011');
+            labelBox.setText(categoryText);
+
+            // Percentage column.
+            int percentCol = offsetCol + 2;
+            double percent = (total == 0.0 ? 0.0 : values[i].doubleValue() / total * 100.0);
+            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentCol, row, percentCol + 1, row + 1);
+
+            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
+            percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percent));
+            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
+        }
+
+        configureCustomLegendLayout(chart);
+    }
+
+    // Private helper methods
     private void configure3DView(XSSFChart chart)
     {
         XDDFView3D view3D = chart.getOrAddView3D();
@@ -398,266 +720,6 @@ public final class WorksheetChartCreator
 
                 paragraph.getPPr().getDefRPr().setSz(fontPoint * 100);
             }
-        }
-    }
-
-    /**
-     * Adds a custom legend to a pie based chart.
-     *
-     * <p>
-     * Creates coloured swatches, category labels and calculated percentages using worksheet drawing
-     * objects. Also applies the configured colours to the chart slices and adjusts the plot area to
-     * accommodate the custom legend.
-     * </p>
-     *
-     * <p>
-     * This method supports charts containing exactly one series.
-     * </p>
-     *
-     * @param chart
-     *        the pie based chart to configure
-     * @param config
-     *        the chart configuration containing the single series of category, value and colour
-     *        data
-     */
-    private void drawCustomLegendBox(XSSFChart chart, ConfiguredChartData config)
-    {
-        double total = 0.0;
-        CTPieSer[] seriesArray;
-        ChartSeries chartSeries = config.getChartSeries()[0];
-        String[] categories = chartSeries.getCategories();
-        Number[] values = chartSeries.getValues();
-        byte[][] pointColours = chartSeries.getPointColours();
-        int count = categories.length;
-
-        switch (config.getChartType())
-        {
-            case DOUGHNUT:
-                seriesArray = chart.getCTChart().getPlotArea().getDoughnutChartArray(0).getSerArray();
-            break;
-
-            case PIE:
-                seriesArray = chart.getCTChart().getPlotArea().getPieChartArray(0).getSerArray();
-            break;
-
-            case PIE3D:
-                seriesArray = chart.getCTChart().getPlotArea().getPie3DChartArray(0).getSerArray();
-            break;
-
-            default:
-                throw new IllegalArgumentException("Unsupported chart type.");
-        }
-
-        // We are interested in exactly one series at this stage.
-        CTPieSer series = seriesArray[0];
-
-        // Calculate the total before determining the percentage of each data point.
-        for (int i = 0; i < count; i++)
-        {
-            double value = values[i].doubleValue();
-
-            if (Double.isNaN(value) || Double.isInfinite(value) || value < 0.0)
-            {
-                throw new IllegalStateException("Invalid pie chart value at index " + i + ": " + value);
-            }
-
-            total += value;
-        }
-
-        if (Double.isInfinite(total))
-        {
-            throw new IllegalStateException("Total of pie chart values exceeds the supported range.");
-        }
-
-        // Remove the native chart legend. The custom worksheet-based legend replaces it.
-        if (chart.getCTChart().isSetLegend())
-        {
-            chart.getCTChart().unsetLegend();
-        }
-
-        // Remove native data labels. Percentages are displayed in the custom legend box instead.
-        if (series.isSetDLbls())
-        {
-            series.unsetDLbls();
-        }
-
-        while (series.sizeOfDPtArray() > 0)
-        {
-            series.removeDPt(0);
-        }
-
-        // Apply configured point colours to the chart slices.
-        for (int i = 0; i < count; i++)
-        {
-            byte[] rgb = pointColours[i];
-
-            if (rgb != null)
-            {
-                CTDPt dataPoint = series.addNewDPt();
-                dataPoint.addNewIdx().setVal(i);
-                dataPoint.addNewSpPr().addNewSolidFill().addNewSrgbClr().setVal(rgb);
-            }
-        }
-
-        /*
-         * Render the custom legend using worksheet drawing objects.
-         */
-        int offsetCol = config.getFromCol() + 5;
-        int offsetRow = config.getFromRow() + 6;
-
-        for (int i = 0; i < count; i++)
-        {
-            int row = offsetRow + (i * 2);
-            byte[] rgb = pointColours[i];
-
-            // Colour square, positioned to the left of the category label.
-            int dx1 = 40000;
-            int dy1 = 80000;
-            int dx2 = dx1 + 100000;
-            int dy2 = dy1 + 100000;
-
-            XSSFClientAnchor colourAnchor = new XSSFClientAnchor(dx1, dy1, dx2, dy2, offsetCol, row, offsetCol, row);
-            XSSFSimpleShape colourSquare = xssfDrawing.createSimpleShape(colourAnchor);
-            colourSquare.setShapeType(ShapeTypes.RECT);
-            colourSquare.setLineStyleColor(0, 0, 0);
-
-            if (rgb != null)
-            {
-                colourSquare.setFillColor(rgb[0] & 0xFF, rgb[1] & 0xFF, rgb[2] & 0xFF);
-            }
-
-            // Category label, shifted right to clear the colour swatch.
-            XSSFClientAnchor labelAnchor = new XSSFClientAnchor(180000, 0, 0, 0, offsetCol, row, offsetCol + 2, row + 1);
-
-            XSSFTextBox labelBox = xssfDrawing.createTextbox(labelAnchor);
-
-            // Replace standard hyphens with non-breaking hyphens to prevent unwanted wrapping.
-            String categoryText = categories[i].replace('-', '\u2011');
-            labelBox.setText(categoryText);
-
-            // Percentage column.
-            int percentCol = offsetCol + 2;
-            double percent = (total == 0.0 ? 0.0 : values[i].doubleValue() / total * 100.0);
-            XSSFClientAnchor percentageAnchor = new XSSFClientAnchor(0, 0, 0, 0, percentCol, row, percentCol + 1, row + 1);
-
-            XSSFTextBox percentageBox = xssfDrawing.createTextbox(percentageAnchor);
-            percentageBox.setText(String.format(Locale.ROOT, "%.1f%%", percent));
-            percentageBox.setTextDirection(TextDirection.HORIZONTAL);
-        }
-
-        configureCustomLegendLayout(chart);
-    }
-
-    /**
-     * Configures the properties of a bar chart.
-     *
-     * @param barData
-     *        the bar chart data object
-     * @param valueAxis
-     *        the Y axis object
-     * @param config
-     *        the chart configuration
-     */
-    private void configureBarChart(XSSFChart chart, XDDFBarChartData barData, ConfiguredChartData config)
-    {
-        byte[] rgbFillBytes = config.getRgbFillBytes();
-        CTBarChart ctBarChart = chart.getCTChart().getPlotArea().getBarChartArray(0);
-
-        barData.setBarDirection(config.getBarDirection());
-        barData.setBarGrouping(BarGrouping.CLUSTERED);
-        barData.setVaryColors(rgbFillBytes == null);
-        barData.setGapWidth(80);
-
-        if (rgbFillBytes != null)
-        {
-            for (int i = 0; i < barData.getSeriesCount(); i++)
-            {
-                XDDFChartData.Series series = barData.getSeries(i);
-                XDDFShapeProperties shapeProperties = new XDDFShapeProperties();
-
-                shapeProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(rgbFillBytes)));
-                series.setShapeProperties(shapeProperties);
-            }
-        }
-
-        for (CTBarSer barSeries : ctBarChart.getSerArray())
-        {
-            CTDLbls dataLabels = barSeries.addNewDLbls();
-
-            dataLabels.addNewShowLegendKey().setVal(false);
-            dataLabels.addNewShowVal().setVal(true);
-            dataLabels.addNewShowCatName().setVal(false);
-            dataLabels.addNewShowSerName().setVal(false);
-            dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
-        }
-    }
-
-    /**
-     * Configures line chart properties such as line smoothing and markers.
-     *
-     * @param lineData
-     *        the line chart data object
-     * @param config
-     *        the chart configuration
-     */
-    private void configureLineChart(XDDFLineChartData lineData, ConfiguredChartData config)
-    {
-        lineData.setVaryColors(false);
-
-        // Iterate through the series using index-based access
-        int seriesCount = lineData.getSeriesCount();
-
-        for (int i = 0; i < seriesCount; i++)
-        {
-            XDDFChartData.Series series = lineData.getSeries(i);
-
-            if (series instanceof XDDFLineChartData.Series)
-            {
-                XDDFLineChartData.Series lineSeries = (XDDFLineChartData.Series) series;
-
-                lineSeries.setSmooth(false);
-                lineSeries.setMarkerStyle(MarkerStyle.CIRCLE);
-                lineSeries.setMarkerSize((short) 5);
-            }
-        }
-    }
-
-    /**
-     * Configures Scatter/XY chart properties.
-     *
-     * @param scatterData
-     *        the scatter chart data object
-     * @param config
-     *        the chart configuration
-     */
-    private void configureScatterChart(XDDFScatterChartData scatterData, ConfiguredChartData config)
-    {
-        int seriesCount = scatterData.getSeriesCount();
-
-        scatterData.setVaryColors(false);
-        scatterData.setStyle(scatterLineVisible ? ScatterStyle.SMOOTH_MARKER : ScatterStyle.MARKER);
-
-        for (int i = 0; i < seriesCount; i++)
-        {
-            XDDFLineProperties lineProperties = new XDDFLineProperties();
-            XDDFScatterChartData.Series scatterSeries = (XDDFScatterChartData.Series) scatterData.getSeries(i);
-
-            scatterSeries.setSmooth(scatterLineVisible);
-            scatterSeries.setMarkerStyle(MarkerStyle.DIAMOND);
-            scatterSeries.setMarkerSize((short) 5);
-
-            if (scatterLineVisible)
-            {
-                lineProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(new byte[]{52, 120, (byte) 234})));
-                lineProperties.setWidth(1.5);
-            }
-
-            else
-            {
-                lineProperties.setFillProperties(new XDDFNoFillProperties());
-            }
-
-            scatterSeries.setLineProperties(lineProperties);
         }
     }
 

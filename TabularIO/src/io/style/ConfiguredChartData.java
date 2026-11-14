@@ -185,7 +185,7 @@ public final class ConfiguredChartData
      *
      * @return a copy of the RGB colour bytes, or {@code null} if not specified
      */
-    public byte[] getRgbFillBytes()
+    public byte[] getRgbBarFillBytes()
     {
         return (barFillBytesRGB == null ? null : barFillBytesRGB.clone());
     }
@@ -272,7 +272,7 @@ public final class ConfiguredChartData
         /**
          * Returns the optional RGB colours configured for individual data points.
          *
-         * @return a deep copy of the point colour array; individual entries may be {@code null}
+         * @return a deep copy of the point colour array. Individual entries may be {@code null}
          */
         public byte[][] getPointColours()
         {
@@ -345,6 +345,7 @@ public final class ConfiguredChartData
          *
          * @param type
          *        the Apache POI chart type; must not be {@code null}
+         * 
          * @throws NullPointerException
          *         if {@code type} is {@code null}
          */
@@ -379,7 +380,7 @@ public final class ConfiguredChartData
          * Sets the font size of the chart title, in points.
          *
          * @param point
-         *        the title font size; negative values are ignored
+         *        the title font size. Negative values are ignored
          * @return this builder instance for method chaining
          */
         public Builder titleFontPoint(int point)
@@ -399,6 +400,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
+         * 
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
@@ -419,7 +421,7 @@ public final class ConfiguredChartData
          * Sets the legend label for the active series.
          *
          * @param label
-         *        the legend label; leading and trailing whitespace is removed
+         *        the legend label with leading and trailing whitespace removed
          * @return this builder instance for method chaining
          */
         public Builder legendLabel(String label)
@@ -434,6 +436,7 @@ public final class ConfiguredChartData
          * @param point
          *        the legend font size; must not be negative
          * @return this builder instance for method chaining
+         * 
          * @throws IllegalArgumentException
          *         if {@code point} is negative
          */
@@ -498,37 +501,14 @@ public final class ConfiguredChartData
         }
 
         /**
-         * Starts a new chart series with the specified legend label and font size.
+         * Starts a new chart series.
          *
-         * @param label
-         *        the legend label for the new series; may be {@code null}
-         * @param legendFontPoint
-         *        the legend font size in points; must not be negative
          * @return this builder instance for method chaining
-         * @throws IllegalArgumentException
-         *         if {@code legendFontPoint} is negative
          */
-        public Builder addSeries(String label, int legendFontPoint)
+        public Builder addSeries()
         {
-            if (legendFontPoint < 0)
-            {
-                throw new IllegalArgumentException("Legend font size cannot be negative");
-            }
-
-            bd_series.add(new SeriesBuilder(label, legendFontPoint));
+            bd_series.add(new SeriesBuilder());
             return this;
-        }
-
-        /**
-         * Starts a new chart series using the default legend font size of 12 points.
-         *
-         * @param label
-         *        the legend label for the new series; may be {@code null}
-         * @return this builder instance for method chaining
-         */
-        public Builder addSeries(String label)
-        {
-            return addSeries(label, 12);
         }
 
         /**
@@ -586,6 +566,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
+         * 
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
@@ -625,7 +606,6 @@ public final class ConfiguredChartData
          */
         public Builder fromRow(int row)
         {
-
             bd_fromRow = row;
             return this;
         }
@@ -679,14 +659,22 @@ public final class ConfiguredChartData
          * Sets the logarithmic base for the bar value axis.
          *
          * @param base
-         *        the logarithmic base; values greater than one enable logarithmic scaling
+         *        the logarithmic base. Values greater than one enable logarithmic scaling
          * @return this builder instance for method chaining
+         * 
+         * @throws IllegalArgumentException
+         *         if the input base is not greater than one
          */
         public Builder barScaleLogBase(int base)
         {
             if (base > 1)
             {
                 bd_barScaleLogBase = base;
+            }
+
+            else
+            {
+                throw new IllegalArgumentException("Logarithmic base must be greater than 1. Found [" + base+"]");
             }
 
             return this;
@@ -699,6 +687,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
+         * 
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
@@ -730,7 +719,7 @@ public final class ConfiguredChartData
         {
             if (bd_series.isEmpty())
             {
-                bd_series.add(new SeriesBuilder(null, 12));
+                bd_series.add(new SeriesBuilder());
             }
 
             return bd_series.get(bd_series.size() - 1);
@@ -745,10 +734,9 @@ public final class ConfiguredChartData
             private final List<byte[]> pointColours;
             private byte[] seriesColour;
 
-            private SeriesBuilder(String label, int legendFontPoint)
+            private SeriesBuilder()
             {
-                this.label = (label == null ? null : label.trim());
-                this.legendFontPoint = legendFontPoint;
+                this.legendFontPoint = 12;
                 this.categories = new ArrayList<>();
                 this.values = new ArrayList<>();
                 this.pointColours = new ArrayList<>();
@@ -761,16 +749,24 @@ public final class ConfiguredChartData
                     throw new IllegalArgumentException("Category cannot be null or blank");
                 }
 
-                Objects.requireNonNull(value, "Value cannot be null");
+                if (value == null)
+                {
+                    throw new IllegalArgumentException("Value cannot be null ");
+                }
 
                 if (rgb != null && rgb.length != 3)
                 {
                     throw new IllegalArgumentException("RGB colour must contain exactly three bytes");
                 }
 
-                categories.add(category);
+                // Prevent Excel chart axes from wrapping multi-word category labels
+                String cleanedCategory = category.trim().replace(' ', '\u00A0');
+
+                categories.add(cleanedCategory);
                 values.add(value);
                 pointColours.add(rgb == null ? null : rgb.clone());
+                
+                System.out.printf("%s\t%d\n", cleanedCategory, value);
             }
         }
     }
