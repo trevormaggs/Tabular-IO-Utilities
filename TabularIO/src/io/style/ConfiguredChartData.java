@@ -34,6 +34,16 @@ public final class ConfiguredChartData
     private final int barScaleLogBase;
     private final byte[] barFillBytesRGB;
 
+    public enum DataLabelPosition
+    {
+        CENTER, INSIDE_END, INSIDE_BASE, OUTSIDE_END;
+    }
+
+    public enum DataLabelOrientation
+    {
+        HORIZONTAL, VERTICAL, VERTICAL_270;
+    }
+
     /**
      * Constructs an immutable chart configuration from the specified builder.
      *
@@ -198,6 +208,8 @@ public final class ConfiguredChartData
     {
         private final String legendLabel;
         private final int legendFontPoint;
+        private final DataLabelPosition labelPosition;
+        private final DataLabelOrientation labelOrientation;
         private final String[] categories;
         private final Number[] values;
         private final byte[][] pointColours;
@@ -205,28 +217,32 @@ public final class ConfiguredChartData
 
         private ChartSeries(Builder.SeriesBuilder builder)
         {
-            legendLabel = builder.label;
-            legendFontPoint = builder.legendFontPoint;
-            categories = builder.categories.toArray(new String[0]);
-            values = builder.values.toArray(new Number[0]);
-            pointColours = new byte[builder.pointColours.size()][];
+            this.legendLabel = builder.sb_label;
+            this.legendFontPoint = builder.sb_legendFontPoint;
+            this.labelPosition = builder.sb_labelPosition;
+            this.labelOrientation = builder.sb_labelOrientation;
+            this.categories = builder.sb_categories.toArray(new String[0]);
+            this.values = builder.sb_values.toArray(new Number[0]);
+            this.pointColours = new byte[builder.sb_pointColours.size()][];
 
             for (int i = 0; i < pointColours.length; i++)
             {
-                pointColours[i] = (builder.pointColours.get(i) == null ? null : builder.pointColours.get(i).clone());
+                this.pointColours[i] = (builder.sb_pointColours.get(i) == null ? null : builder.sb_pointColours.get(i).clone());
             }
 
-            seriesColour = (builder.seriesColour == null ? null : builder.seriesColour.clone());
+            this.seriesColour = (builder.sb_seriesColour == null ? null : builder.sb_seriesColour.clone());
         }
 
         private ChartSeries(ChartSeries source)
         {
-            legendLabel = source.legendLabel;
-            legendFontPoint = source.legendFontPoint;
-            categories = source.categories.clone();
-            values = source.values.clone();
-            pointColours = cloneColours(source.pointColours);
-            seriesColour = (source.seriesColour == null ? null : source.seriesColour.clone());
+            this.legendLabel = source.legendLabel;
+            this.legendFontPoint = source.legendFontPoint;
+            this.labelPosition = source.labelPosition;
+            this.labelOrientation = source.labelOrientation;
+            this.categories = source.categories.clone();
+            this.values = source.values.clone();
+            this.pointColours = cloneColours(source.pointColours);
+            this.seriesColour = (source.seriesColour == null ? null : source.seriesColour.clone());
         }
 
         /**
@@ -247,6 +263,16 @@ public final class ConfiguredChartData
         public int getLegendFontPoint()
         {
             return legendFontPoint;
+        }
+
+        public DataLabelPosition getLabelPosition()
+        {
+            return labelPosition;
+        }
+
+        public DataLabelOrientation getLabelOrientation()
+        {
+            return labelOrientation;
         }
 
         /**
@@ -426,7 +452,7 @@ public final class ConfiguredChartData
          */
         public Builder legendLabel(String label)
         {
-            getActiveSeries().label = (label == null ? null : label.trim());
+            getActiveSeries().sb_label = (label == null ? null : label.trim());
             return this;
         }
 
@@ -447,7 +473,19 @@ public final class ConfiguredChartData
                 throw new IllegalArgumentException("Legend font size cannot be negative");
             }
 
-            getActiveSeries().legendFontPoint = point;
+            getActiveSeries().sb_legendFontPoint = point;
+            return this;
+        }
+
+        public Builder labelPosition(DataLabelPosition position)
+        {
+            getActiveSeries().sb_labelPosition = Objects.requireNonNull(position);
+            return this;
+        }
+        
+        public Builder labelOrientation(DataLabelOrientation orientation)
+        {
+            getActiveSeries().sb_labelOrientation = Objects.requireNonNull(orientation);
             return this;
         }
 
@@ -580,7 +618,7 @@ public final class ConfiguredChartData
                 throw new IllegalArgumentException("Invalid RGB colour: " + hex);
             }
 
-            getActiveSeries().seriesColour = rgb;
+            getActiveSeries().sb_seriesColour = rgb;
             return this;
         }
 
@@ -674,7 +712,7 @@ public final class ConfiguredChartData
 
             else
             {
-                throw new IllegalArgumentException("Logarithmic base must be greater than 1. Found [" + base+"]");
+                throw new IllegalArgumentException("Logarithmic base must be greater than 1. Found [" + base + "]");
             }
 
             return this;
@@ -727,19 +765,23 @@ public final class ConfiguredChartData
 
         private static final class SeriesBuilder
         {
-            private String label;
-            private int legendFontPoint;
-            private final List<String> categories;
-            private final List<Number> values;
-            private final List<byte[]> pointColours;
-            private byte[] seriesColour;
+            private String sb_label;
+            private int sb_legendFontPoint;
+            private DataLabelPosition sb_labelPosition;
+            private DataLabelOrientation sb_labelOrientation;
+            private final List<String> sb_categories;
+            private final List<Number> sb_values;
+            private final List<byte[]> sb_pointColours;
+            private byte[] sb_seriesColour;
 
             private SeriesBuilder()
             {
-                this.legendFontPoint = 12;
-                this.categories = new ArrayList<>();
-                this.values = new ArrayList<>();
-                this.pointColours = new ArrayList<>();
+                this.sb_legendFontPoint = 12;
+                this.sb_labelPosition = DataLabelPosition.OUTSIDE_END;
+                this.sb_labelOrientation = DataLabelOrientation.HORIZONTAL;
+                this.sb_categories = new ArrayList<>();
+                this.sb_values = new ArrayList<>();
+                this.sb_pointColours = new ArrayList<>();
             }
 
             private void point(String category, Number value, byte[] rgb)
@@ -762,11 +804,9 @@ public final class ConfiguredChartData
                 // Prevent Excel chart axes from wrapping multi-word category labels
                 String cleanedCategory = category.trim().replace(' ', '\u00A0');
 
-                categories.add(cleanedCategory);
-                values.add(value);
-                pointColours.add(rgb == null ? null : rgb.clone());
-                
-                System.out.printf("%s\t%d\n", cleanedCategory, value);
+                sb_categories.add(cleanedCategory);
+                sb_values.add(value);
+                sb_pointColours.add(rgb == null ? null : rgb.clone());
             }
         }
     }

@@ -54,6 +54,7 @@ import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
+import org.openxmlformats.schemas.drawingml.x2006.main.STTextVerticalType;
 import io.TabularDataException;
 import io.style.ConfiguredChartData.ChartSeries;
 
@@ -349,7 +350,47 @@ public final class WorksheetChartCreator
             dataLabels.addNewShowVal().setVal(true);
             dataLabels.addNewShowCatName().setVal(false);
             dataLabels.addNewShowSerName().setVal(false);
-            dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
+
+            switch (chartSeries[seriesIdx].getLabelPosition())
+            {
+                case CENTER:
+                    dataLabels.addNewDLblPos().setVal(STDLblPos.CTR);
+                break;
+
+                case INSIDE_END:
+                    dataLabels.addNewDLblPos().setVal(STDLblPos.IN_END);
+                break;
+
+                case INSIDE_BASE:
+                    dataLabels.addNewDLblPos().setVal(STDLblPos.IN_BASE);
+                break;
+
+                case OUTSIDE_END:
+                    dataLabels.addNewDLblPos().setVal(STDLblPos.OUT_END);
+                break;
+            }
+
+            CTTextBody textProperties = dataLabels.addNewTxPr();
+
+            switch (chartSeries[seriesIdx].getLabelOrientation())
+            {
+                case HORIZONTAL:
+                    textProperties.addNewBodyPr().setVert(STTextVerticalType.HORZ);
+                break;
+
+                case VERTICAL:
+                    textProperties.addNewBodyPr().setVert(STTextVerticalType.VERT);
+                break;
+
+                case VERTICAL_270:
+                    textProperties.addNewBodyPr().setVert(STTextVerticalType.VERT_270);
+                break;
+            }
+
+            textProperties.addNewLstStyle();
+
+            CTTextParagraph paragraph = textProperties.addNewP();
+            paragraph.addNewPPr().addNewDefRPr().setSz(900); // 9 pt
 
             // Explicitly delete/hide data labels for zero or negative values
             // so Excel's log-scale engine doesn't fling them to the top.
