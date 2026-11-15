@@ -392,8 +392,10 @@ public final class WorksheetChartCreator
             CTTextParagraph paragraph = textProperties.addNewP();
             paragraph.addNewPPr().addNewDefRPr().setSz(900); // 9 pt
 
-            // Explicitly delete/hide data labels for zero or negative values
-            // so Excel's log-scale engine doesn't fling them to the top.
+            /*
+             * In cases where values are negative or zero, this will
+             * stop them from popping up to the top by hiding them.
+             */
             Number[] values = chartSeries[seriesIdx].getValues();
 
             for (int i = 0; i < values.length; i++)
