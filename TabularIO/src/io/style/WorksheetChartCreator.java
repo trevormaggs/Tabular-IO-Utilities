@@ -341,9 +341,9 @@ public final class WorksheetChartCreator
 
         ChartSeries[] chartSeries = config.getChartSeries();
 
-        for (int seriesIdx = 0; seriesIdx < ctBarChart.sizeOfSerArray(); seriesIdx++)
+        for (int i = 0; i < ctBarChart.sizeOfSerArray(); i++)
         {
-            CTBarSer barSeries = ctBarChart.getSerArray(seriesIdx);
+            CTBarSer barSeries = ctBarChart.getSerArray(i);
             CTDLbls dataLabels = barSeries.addNewDLbls();
 
             dataLabels.addNewShowLegendKey().setVal(false);
@@ -351,7 +351,7 @@ public final class WorksheetChartCreator
             dataLabels.addNewShowCatName().setVal(false);
             dataLabels.addNewShowSerName().setVal(false);
 
-            switch (chartSeries[seriesIdx].getLabelPosition())
+            switch (chartSeries[i].getLabelPosition())
             {
                 case CENTER:
                     dataLabels.addNewDLblPos().setVal(STDLblPos.CTR);
@@ -372,7 +372,7 @@ public final class WorksheetChartCreator
 
             CTTextBody textProperties = dataLabels.addNewTxPr();
 
-            switch (chartSeries[seriesIdx].getLabelOrientation())
+            switch (chartSeries[i].getLabelOrientation())
             {
                 case HORIZONTAL:
                     textProperties.addNewBodyPr().setVert(STTextVerticalType.HORZ);
@@ -396,14 +396,14 @@ public final class WorksheetChartCreator
              * In cases where values are negative or zero, this will
              * stop them from popping up to the top by hiding them.
              */
-            Number[] values = chartSeries[seriesIdx].getValues();
+            Number[] values = chartSeries[i].getValues();
 
-            for (int i = 0; i < values.length; i++)
+            for (int j = 0; j < values.length; j++)
             {
-                if (values[i].doubleValue() <= 0.0)
+                if (values[j].doubleValue() <= 0.0)
                 {
                     CTDLbl dLbl = dataLabels.addNewDLbl();
-                    dLbl.addNewIdx().setVal(i);
+                    dLbl.addNewIdx().setVal(j);
                     dLbl.addNewDelete().setVal(true);
                 }
             }
