@@ -165,10 +165,11 @@ public final class WorksheetChartCreator
      *
      * @param configs
      *        the array of chart configurations to render
+     *
      * @throws NullPointerException
      *         if {@code configs} is {@code null}
      * @throws TabularDataException
-     *         if any chart cannot be created or rendered
+     *         if an error occurs while rendering a chart or a configuration is {@code null}
      */
     public void renderChart(ConfiguredChartData[] configs) throws TabularDataException
     {
@@ -188,11 +189,14 @@ public final class WorksheetChartCreator
      * @return the newly rendered chart
      *
      * @throws TabularDataException
-     *         if {@code config} is {@code null}
+     *         if an error occurs while rendering the chart or {@code config} is {@code null}
      */
     public XSSFChart renderChart(ConfiguredChartData config) throws TabularDataException
     {
-        Objects.requireNonNull(config, "Chart configuration cannot be null");
+        if (config == null)
+        {
+            throw new TabularDataException("Chart configuration cannot be null");
+        }
 
         ChartTypes type = config.getChartType();
         ChartSeries[] chartSeries = config.getChartSeries();
