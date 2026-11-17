@@ -44,6 +44,7 @@ import org.openxmlformats.schemas.drawingml.x2006.chart.CTDPt;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTLayout;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTLegend;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTManualLayout;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTMarker;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTPieSer;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTPlotArea;
 import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle;
@@ -51,6 +52,7 @@ import org.openxmlformats.schemas.drawingml.x2006.chart.STDLblPos;
 import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutMode;
 import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutTarget;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTShapeProperties;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
 import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
@@ -454,23 +456,38 @@ public final class WorksheetChartCreator
      */
     private void drawScatterChart(XDDFScatterChartData scatterData, ConfiguredChartData config)
     {
-        int seriesCount = scatterData.getSeriesCount();
+        ConfiguredChartData.ChartSeries[] configuredSeries = config.getChartSeries();
 
         scatterData.setVaryColors(false);
         scatterData.setStyle(scatterLineVisible ? ScatterStyle.SMOOTH_MARKER : ScatterStyle.MARKER);
 
-        for (int i = 0; i < seriesCount; i++)
+        for (int i = 0; i < scatterData.getSeriesCount(); i++)
         {
-            XDDFLineProperties lineProperties = new XDDFLineProperties();
             XDDFScatterChartData.Series scatterSeries = (XDDFScatterChartData.Series) scatterData.getSeries(i);
 
             scatterSeries.setSmooth(scatterLineVisible);
             scatterSeries.setMarkerStyle(MarkerStyle.DIAMOND);
             scatterSeries.setMarkerSize((short) 5);
 
+            byte[] rgb = configuredSeries[i].getSeriesColour();
+            XDDFLineProperties lineProperties = new XDDFLineProperties();
+
+            if (rgb != null)
+            {
+                XDDFColor colour = XDDFColor.from(rgb);
+
+                // Set the marker fill and outline.
+                CTMarker marker = scatterSeries.getCTScatterSer().getMarker();
+                CTShapeProperties markerProperties = marker.addNewSpPr();
+
+                XDDFShapeProperties properties = new XDDFShapeProperties(markerProperties);
+                properties.setFillProperties(new XDDFSolidFillProperties(colour));
+                properties.setLineProperties(new XDDFLineProperties(new XDDFSolidFillProperties(colour)));
+                lineProperties.setFillProperties(new XDDFSolidFillProperties(colour));
+            }
+
             if (scatterLineVisible)
             {
-                lineProperties.setFillProperties(new XDDFSolidFillProperties(XDDFColor.from(new byte[]{52, 120, (byte) 234})));
                 lineProperties.setWidth(1.5);
             }
 
@@ -652,7 +669,7 @@ public final class WorksheetChartCreator
      *        the chart whose title is to be configured
      * @param config
      *        the chart configuration containing the title formatting properties
-     * 
+     *
      * @throws NullPointerException
      *         if {@code chart} or {@code config} is {@code null}
      * @throws IllegalArgumentException

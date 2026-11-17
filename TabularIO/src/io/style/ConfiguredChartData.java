@@ -2,6 +2,7 @@ package io.style;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.xddf.usermodel.chart.BarDirection;
 import org.apache.poi.xddf.usermodel.chart.ChartTypes;
@@ -42,6 +43,161 @@ public final class ConfiguredChartData
     public enum DataLabelOrientation
     {
         HORIZONTAL, VERTICAL, VERTICAL_270;
+    }
+
+    /**
+     * Represents one chart series, including its legend settings, category/value pairs and optional
+     * point-level or series-level colours.
+     */
+    public static final class ChartSeries
+    {
+        private final String legendLabel;
+        private final int legendFontPoint;
+        private final DataLabelPosition labelPosition;
+        private final DataLabelOrientation labelOrientation;
+        private final String[] categories;
+        private final Number[] values;
+        private final byte[][] pointColours;
+        private final byte[] seriesColour;
+
+        private ChartSeries(Builder.SeriesBuilder builder)
+        {
+            this.legendLabel = builder.sb_label;
+            this.legendFontPoint = builder.sb_legendFontPoint;
+            this.labelPosition = builder.sb_labelPosition;
+            this.labelOrientation = builder.sb_labelOrientation;
+            this.categories = builder.sb_categories.toArray(new String[0]);
+            this.values = builder.sb_values.toArray(new Number[0]);
+            this.pointColours = new byte[builder.sb_pointColours.size()][];
+
+            for (int i = 0; i < pointColours.length; i++)
+            {
+                this.pointColours[i] = (builder.sb_pointColours.get(i) == null ? null : builder.sb_pointColours.get(i).clone());
+            }
+
+            this.seriesColour = (builder.sb_seriesColour == null ? null : builder.sb_seriesColour.clone());
+        }
+
+        private ChartSeries(ChartSeries source)
+        {
+            this.legendLabel = source.legendLabel;
+            this.legendFontPoint = source.legendFontPoint;
+            this.labelPosition = source.labelPosition;
+            this.labelOrientation = source.labelOrientation;
+            this.categories = source.categories.clone();
+            this.values = source.values.clone();
+            this.pointColours = cloneColours(source.pointColours);
+            this.seriesColour = (source.seriesColour == null ? null : source.seriesColour.clone());
+        }
+
+        /**
+         * Returns the legend label describing this series.
+         *
+         * @return the legend label, or {@code null} if not specified
+         */
+        public String getLegendLabel()
+        {
+            return legendLabel;
+        }
+
+        /**
+         * Returns the font size configured for the chart legend, in points.
+         *
+         * @return the legend font size in points
+         */
+        public int getLegendFontPoint()
+        {
+            return legendFontPoint;
+        }
+
+        /**
+         * Returns the position of data point labels, describing where they are placed
+         * relative to the data points.
+         *
+         * @return the data label position
+         */
+        public DataLabelPosition getLabelPosition()
+        {
+            return labelPosition;
+        }
+
+        /**
+         * Returns the orientation of data point labels.
+         *
+         * @return the data label orientation
+         */
+        public DataLabelOrientation getLabelOrientation()
+        {
+            return labelOrientation;
+        }
+
+        /**
+         * Returns the categories belonging to this series.
+         *
+         * @return a copy of the category array
+         */
+        public String[] getCategories()
+        {
+            return categories.clone();
+        }
+
+        /**
+         * Returns the numerical values belonging to this series.
+         *
+         * @return a copy of the value array
+         */
+        public Number[] getValues()
+        {
+            return values.clone();
+        }
+
+        /**
+         * Returns the optional RGB colours configured for individual data points.
+         *
+         * @return a deep copy of the point colour array. Individual entries may be {@code null}
+         */
+        public byte[][] getPointColours()
+        {
+            return cloneColours(pointColours);
+        }
+
+        /**
+         * Returns the optional RGB colour configured for the entire series.
+         *
+         * @return a copy of the RGB colour bytes, or {@code null} if not specified
+         */
+        public byte[] getSeriesColour()
+        {
+            return (seriesColour == null ? null : seriesColour.clone());
+        }
+
+        /**
+         * Returns the number of data points in this series.
+         *
+         * @return the number of categories and values in the series
+         */
+        public int size()
+        {
+            return categories.length;
+        }
+
+        // Performs a deep copy of 2-D array of RGB colours.
+        private static byte[][] cloneColours(byte[][] colours)
+        {
+            if (colours == null)
+            {
+                return null;
+            }
+
+            byte[][] copy = new byte[colours.length][];
+
+            for (int i = 0; i < colours.length; i++)
+            {
+                copy[i] = (colours[i] == null ? null : colours[i].clone());
+            }
+
+            return copy;
+        }
     }
 
     /**
@@ -201,149 +357,6 @@ public final class ConfiguredChartData
     }
 
     /**
-     * Represents one chart series, including its legend settings, category/value pairs and optional
-     * point-level or series-level colours.
-     */
-    public static final class ChartSeries
-    {
-        private final String legendLabel;
-        private final int legendFontPoint;
-        private final DataLabelPosition labelPosition;
-        private final DataLabelOrientation labelOrientation;
-        private final String[] categories;
-        private final Number[] values;
-        private final byte[][] pointColours;
-        private final byte[] seriesColour;
-
-        private ChartSeries(Builder.SeriesBuilder builder)
-        {
-            this.legendLabel = builder.sb_label;
-            this.legendFontPoint = builder.sb_legendFontPoint;
-            this.labelPosition = builder.sb_labelPosition;
-            this.labelOrientation = builder.sb_labelOrientation;
-            this.categories = builder.sb_categories.toArray(new String[0]);
-            this.values = builder.sb_values.toArray(new Number[0]);
-            this.pointColours = new byte[builder.sb_pointColours.size()][];
-
-            for (int i = 0; i < pointColours.length; i++)
-            {
-                this.pointColours[i] = (builder.sb_pointColours.get(i) == null ? null : builder.sb_pointColours.get(i).clone());
-            }
-
-            this.seriesColour = (builder.sb_seriesColour == null ? null : builder.sb_seriesColour.clone());
-        }
-
-        private ChartSeries(ChartSeries source)
-        {
-            this.legendLabel = source.legendLabel;
-            this.legendFontPoint = source.legendFontPoint;
-            this.labelPosition = source.labelPosition;
-            this.labelOrientation = source.labelOrientation;
-            this.categories = source.categories.clone();
-            this.values = source.values.clone();
-            this.pointColours = cloneColours(source.pointColours);
-            this.seriesColour = (source.seriesColour == null ? null : source.seriesColour.clone());
-        }
-
-        /**
-         * Returns the legend label describing this series.
-         *
-         * @return the legend label, or {@code null} if not specified
-         */
-        public String getLegendLabel()
-        {
-            return legendLabel;
-        }
-
-        /**
-         * Returns the font size configured for the chart legend, in points.
-         *
-         * @return the legend font size in points
-         */
-        public int getLegendFontPoint()
-        {
-            return legendFontPoint;
-        }
-
-        public DataLabelPosition getLabelPosition()
-        {
-            return labelPosition;
-        }
-
-        public DataLabelOrientation getLabelOrientation()
-        {
-            return labelOrientation;
-        }
-
-        /**
-         * Returns the categories belonging to this series.
-         *
-         * @return a copy of the category array
-         */
-        public String[] getCategories()
-        {
-            return categories.clone();
-        }
-
-        /**
-         * Returns the numerical values belonging to this series.
-         *
-         * @return a copy of the value array
-         */
-        public Number[] getValues()
-        {
-            return values.clone();
-        }
-
-        /**
-         * Returns the optional RGB colours configured for individual data points.
-         *
-         * @return a deep copy of the point colour array. Individual entries may be {@code null}
-         */
-        public byte[][] getPointColours()
-        {
-            return cloneColours(pointColours);
-        }
-
-        /**
-         * Returns the optional RGB colour configured for the entire series.
-         *
-         * @return a copy of the RGB colour bytes, or {@code null} if not specified
-         */
-        public byte[] getSeriesColour()
-        {
-            return (seriesColour == null ? null : seriesColour.clone());
-        }
-
-        /**
-         * Returns the number of data points in this series.
-         *
-         * @return the number of categories and values in the series
-         */
-        public int size()
-        {
-            return categories.length;
-        }
-
-        private static byte[][] cloneColours(byte[][] colours)
-        {
-            if (colours == null)
-            {
-                return null;
-            }
-
-            byte[][] copy = new byte[colours.length][];
-
-            for (int i = 0; i < colours.length; i++)
-            {
-                copy[i] = (colours[i] == null ? null : colours[i].clone());
-            }
-
-            return copy;
-        }
-    }
-
-    /**
      * Builder for constructing {@link ConfiguredChartData} instances.
      *
      * <p>
@@ -477,12 +490,32 @@ public final class ConfiguredChartData
             return this;
         }
 
+        /**
+         * Sets the position of data point labels for the active series.
+         *
+         * @param position
+         *        the data label position; must not be {@code null}
+         * @return this builder instance for method chaining
+         *
+         * @throws NullPointerException
+         *         if {@code position} is {@code null}
+         */
         public Builder labelPosition(DataLabelPosition position)
         {
             getActiveSeries().sb_labelPosition = Objects.requireNonNull(position);
             return this;
         }
-        
+
+        /**
+         * Sets the orientation of data point labels for the active series.
+         *
+         * @param orientation
+         *        the data label orientation; must not be {@code null}
+         * @return this builder instance for method chaining
+         *
+         * @throws NullPointerException
+         *         if {@code orientation} is {@code null}
+         */
         public Builder labelOrientation(DataLabelOrientation orientation)
         {
             getActiveSeries().sb_labelOrientation = Objects.requireNonNull(orientation);
@@ -689,7 +722,7 @@ public final class ConfiguredChartData
         public Builder barDirection(String direction)
         {
             Objects.requireNonNull(direction, "Bar direction cannot be null");
-            bd_barDirection = BarDirection.valueOf(direction.trim().toUpperCase());
+            bd_barDirection = BarDirection.valueOf(direction.trim().toUpperCase(Locale.ROOT));
             return this;
         }
 
