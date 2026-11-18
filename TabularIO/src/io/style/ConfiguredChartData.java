@@ -6,7 +6,7 @@ import java.util.Locale;
 import java.util.Objects;
 import org.apache.poi.xddf.usermodel.chart.BarDirection;
 import org.apache.poi.xddf.usermodel.chart.ChartTypes;
-import util.HexByteConversion;
+import util.HexDecoder;
 
 /**
  * Immutable configuration describing the data, appearance and layout of a chart.
@@ -445,7 +445,7 @@ public final class ConfiguredChartData
          */
         public Builder titleColourHex(String hex)
         {
-            byte[] rgb = HexByteConversion.decode(hex);
+            byte[] rgb = HexDecoder.decode(hex);
 
             if (rgb == null || rgb.length != 3)
             {
@@ -553,7 +553,7 @@ public final class ConfiguredChartData
          */
         public Builder series(String category, Number value, String hexColour)
         {
-            return series(category, value, HexByteConversion.decode(hexColour));
+            return series(category, value, HexDecoder.decode(hexColour));
         }
 
         /**
@@ -613,7 +613,7 @@ public final class ConfiguredChartData
          */
         public Builder point(String category, Number value, String hexColour)
         {
-            return point(category, value, HexByteConversion.decode(hexColour));
+            return point(category, value, HexDecoder.decode(hexColour));
         }
 
         /**
@@ -644,7 +644,7 @@ public final class ConfiguredChartData
         public Builder seriesColourHex(String hex)
         {
 
-            byte[] rgb = HexByteConversion.decode(hex);
+            byte[] rgb = HexDecoder.decode(hex);
 
             if (rgb == null || rgb.length != 3)
             {
@@ -764,7 +764,7 @@ public final class ConfiguredChartData
          */
         public Builder fillColourHex(String hex)
         {
-            byte[] rgb = HexByteConversion.decode(hex);
+            byte[] rgb = HexDecoder.decode(hex);
 
             if (rgb == null || rgb.length != 3)
             {
