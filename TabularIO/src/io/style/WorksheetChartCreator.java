@@ -8,55 +8,10 @@ import org.apache.poi.xddf.usermodel.XDDFLineProperties;
 import org.apache.poi.xddf.usermodel.XDDFNoFillProperties;
 import org.apache.poi.xddf.usermodel.XDDFShapeProperties;
 import org.apache.poi.xddf.usermodel.XDDFSolidFillProperties;
-import org.apache.poi.xddf.usermodel.chart.AxisCrossBetween;
-import org.apache.poi.xddf.usermodel.chart.AxisCrosses;
-import org.apache.poi.xddf.usermodel.chart.AxisPosition;
-import org.apache.poi.xddf.usermodel.chart.BarGrouping;
-import org.apache.poi.xddf.usermodel.chart.ChartTypes;
-import org.apache.poi.xddf.usermodel.chart.LegendPosition;
-import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
-import org.apache.poi.xddf.usermodel.chart.ScatterStyle;
-import org.apache.poi.xddf.usermodel.chart.XDDFAreaChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFBarChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
-import org.apache.poi.xddf.usermodel.chart.XDDFCategoryDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
-import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
-import org.apache.poi.xddf.usermodel.chart.XDDFDoughnutChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
-import org.apache.poi.xddf.usermodel.chart.XDDFScatterChartData;
-import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
-import org.apache.poi.xddf.usermodel.chart.XDDFView3D;
-import org.apache.poi.xssf.usermodel.TextDirection;
-import org.apache.poi.xssf.usermodel.XSSFChart;
-import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
-import org.apache.poi.xssf.usermodel.XSSFDrawing;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFSimpleShape;
-import org.apache.poi.xssf.usermodel.XSSFTextBox;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarChart;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTBarSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbl;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDLbls;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTDPt;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTLayout;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTLegend;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTManualLayout;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTMarker;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTPieSer;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTPlotArea;
-import org.openxmlformats.schemas.drawingml.x2006.chart.CTTitle;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STDLblPos;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutMode;
-import org.openxmlformats.schemas.drawingml.x2006.chart.STLayoutTarget;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTRegularTextRun;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTShapeProperties;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextCharacterProperties;
-import org.openxmlformats.schemas.drawingml.x2006.main.CTTextParagraph;
-import org.openxmlformats.schemas.drawingml.x2006.main.STTextVerticalType;
+import org.apache.poi.xddf.usermodel.chart.*;
+import org.apache.poi.xssf.usermodel.*;
+import org.openxmlformats.schemas.drawingml.x2006.chart.*;
+import org.openxmlformats.schemas.drawingml.x2006.main.*;
 import io.TabularDataException;
 import io.style.ConfiguredChartData.ChartSeries;
 
@@ -79,8 +34,8 @@ import io.style.ConfiguredChartData.ChartSeries;
  */
 public final class WorksheetChartCreator
 {
-    private final static AxisPosition DEFAULT_XAXIS = AxisPosition.BOTTOM;
-    private final static AxisPosition DEFAULT_YAXIS = AxisPosition.LEFT;
+    private static final AxisPosition DEFAULT_XAXIS = AxisPosition.BOTTOM;
+    private static final AxisPosition DEFAULT_YAXIS = AxisPosition.LEFT;
     private final XSSFSheet xssfSheet;
     private final XSSFDrawing xssfDrawing;
     private AxisPosition xAxis;
@@ -149,13 +104,10 @@ public final class WorksheetChartCreator
     }
 
     /**
-     * Overrides the default vertical axis position for subsequently created charts.
+     * Sets whether connecting lines are visible in subsequently created scatter charts.
      *
-     * @param axis
-     *        the new vertical axis position
-     *
-     * @throws NullPointerException
-     *         if {@code axis} is {@code null}
+     * @param line
+     *        {@code true} to display connecting lines or {@code false} to display markers only
      */
     public void setScatterLineVisible(boolean line)
     {
@@ -190,6 +142,9 @@ public final class WorksheetChartCreator
      *        the chart configuration
      * @return the newly rendered chart
      *
+     * @throws IllegalArgumentException
+     *         if the chart contains no series or a pie-based chart does not contain exactly one
+     *         series
      * @throws TabularDataException
      *         if an error occurs while rendering the chart or {@code config} is {@code null}
      */
@@ -316,10 +271,10 @@ public final class WorksheetChartCreator
     /**
      * Configures the properties of a bar chart.
      *
+     * @param chart
+     *        the chart containing the bar chart data
      * @param barData
      *        the bar chart data object
-     * @param valueAxis
-     *        the Y axis object
      * @param config
      *        the chart configuration
      */
@@ -426,9 +381,10 @@ public final class WorksheetChartCreator
      */
     private void drawLineChart(XDDFLineChartData lineData, ConfiguredChartData config)
     {
+        ConfiguredChartData.ChartSeries[] configuredSeries = config.getChartSeries();
+
         lineData.setVaryColors(false);
 
-        // Iterate through the series using index-based access
         int seriesCount = lineData.getSeriesCount();
 
         for (int i = 0; i < seriesCount; i++)
@@ -442,6 +398,23 @@ public final class WorksheetChartCreator
                 lineSeries.setSmooth(false);
                 lineSeries.setMarkerStyle(MarkerStyle.CIRCLE);
                 lineSeries.setMarkerSize((short) 5);
+
+                byte[] rgb = configuredSeries[i].getSeriesColour();
+                XDDFLineProperties lineProperties = new XDDFLineProperties();
+
+                if (rgb != null)
+                {
+                    XDDFColor colour = XDDFColor.from(rgb);
+                    CTMarker marker = lineSeries.getCTLineSer().getMarker();
+                    CTShapeProperties markerProperties = marker.addNewSpPr();
+                    XDDFShapeProperties properties = new XDDFShapeProperties(markerProperties);
+
+                    properties.setFillProperties(new XDDFSolidFillProperties(colour));
+                    properties.setLineProperties(new XDDFLineProperties(new XDDFSolidFillProperties(colour)));
+                    lineProperties.setFillProperties(new XDDFSolidFillProperties(colour));
+                }
+
+                lineSeries.setLineProperties(lineProperties);
             }
         }
     }
@@ -475,12 +448,10 @@ public final class WorksheetChartCreator
             if (rgb != null)
             {
                 XDDFColor colour = XDDFColor.from(rgb);
-
-                // Set the marker fill and outline.
                 CTMarker marker = scatterSeries.getCTScatterSer().getMarker();
                 CTShapeProperties markerProperties = marker.addNewSpPr();
-
                 XDDFShapeProperties properties = new XDDFShapeProperties(markerProperties);
+
                 properties.setFillProperties(new XDDFSolidFillProperties(colour));
                 properties.setLineProperties(new XDDFLineProperties(new XDDFSolidFillProperties(colour)));
                 lineProperties.setFillProperties(new XDDFSolidFillProperties(colour));
@@ -580,6 +551,7 @@ public final class WorksheetChartCreator
             series.unsetDLbls();
         }
 
+        // Make sure any previous colours that may have been configured are cleared first
         while (series.sizeOfDPtArray() > 0)
         {
             series.removeDPt(0);
