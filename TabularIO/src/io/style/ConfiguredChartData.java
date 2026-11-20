@@ -384,7 +384,7 @@ public final class ConfiguredChartData
          *
          * @param type
          *        the Apache POI chart type; must not be {@code null}
-         * 
+         *
          * @throws NullPointerException
          *         if {@code type} is {@code null}
          */
@@ -439,7 +439,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
-         * 
+         *
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
@@ -475,7 +475,7 @@ public final class ConfiguredChartData
          * @param point
          *        the legend font size; must not be negative
          * @return this builder instance for method chaining
-         * 
+         *
          * @throws IllegalArgumentException
          *         if {@code point} is negative
          */
@@ -637,7 +637,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
-         * 
+         *
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
@@ -732,7 +732,7 @@ public final class ConfiguredChartData
          * @param base
          *        the logarithmic base. Values greater than one enable logarithmic scaling
          * @return this builder instance for method chaining
-         * 
+         *
          * @throws IllegalArgumentException
          *         if the input base is not greater than one
          */
@@ -758,7 +758,7 @@ public final class ConfiguredChartData
          * @param hex
          *        the RGB hexadecimal colour string
          * @return this builder instance for method chaining
-         * 
+         *
          * @throws IllegalArgumentException
          *         if the decoded colour is not exactly three bytes
          */
